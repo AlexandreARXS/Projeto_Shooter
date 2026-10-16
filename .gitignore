@@ -10,3 +10,5 @@ DerivedDataCache/
 *.sdf
 *.VC.db
 *.VC.opendb
+
+*.slnx
