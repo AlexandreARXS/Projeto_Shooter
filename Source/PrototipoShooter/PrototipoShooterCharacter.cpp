@@ -10,6 +10,9 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "InputCoreTypes.h"
 #include "PrototipoShooter.h"
 
 APrototipoShooterCharacter::APrototipoShooterCharacter()
@@ -46,6 +49,11 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	// Câmera sobre o ombro (os valores finais são aplicados no BeginPlay)
+	PrimaryActorTick.bCanEverTick = true;
+	CameraBoom->TargetArmLength = ShoulderArmLength;
+	CameraBoom->SocketOffset = ShoulderOffset;
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -65,6 +73,10 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APrototipoShooterCharacter::Look);
+
+		// Ações do shooter
+		SetupShooterInput();
+		EnhancedInputComponent->BindAction(ShoulderSwapAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoSwapShoulder);
 	}
 	else
 	{
@@ -130,4 +142,70 @@ void APrototipoShooterCharacter::DoJumpEnd()
 {
 	// signal the character to stop jumping
 	StopJumping();
+}
+
+void APrototipoShooterCharacter::SetupShooterInput()
+{
+	// cria a ação de troca de ombro se ela não foi definida no Blueprint
+	if (!ShoulderSwapAction)
+	{
+		ShoulderSwapAction = NewObject<UInputAction>(this, TEXT("IA_TrocarOmbro"));
+	}
+
+	// cria o mapping context com as teclas do shooter
+	if (!ShooterMappingContext)
+	{
+		ShooterMappingContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shooter"));
+		ShooterMappingContext->MapKey(ShoulderSwapAction, EKeys::Q);
+		ShooterMappingContext->MapKey(ShoulderSwapAction, EKeys::Gamepad_RightThumbstick);
+	}
+
+	// registra o mapping context no jogador local
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			if (!Subsystem->HasMappingContext(ShooterMappingContext))
+			{
+				Subsystem->AddMappingContext(ShooterMappingContext, 1);
+			}
+		}
+	}
+}
+
+void APrototipoShooterCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	CurrentShoulderSide = bRightShoulder ? 1.f : -1.f;
+
+	CameraBoom->bEnableCameraLag = CameraLagSpeed > 0.f;
+	CameraBoom->CameraLagSpeed = CameraLagSpeed;
+
+	ApplyShoulderCamera();
+}
+
+void APrototipoShooterCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// desliza a câmera suavemente para o ombro escolhido
+	const float TargetSide = bRightShoulder ? 1.f : -1.f;
+	if (!FMath::IsNearlyEqual(CurrentShoulderSide, TargetSide, 0.001f))
+	{
+		CurrentShoulderSide = FMath::FInterpTo(CurrentShoulderSide, TargetSide, DeltaSeconds, ShoulderSwapSpeed);
+	}
+
+	ApplyShoulderCamera();
+}
+
+void APrototipoShooterCharacter::ApplyShoulderCamera()
+{
+	CameraBoom->TargetArmLength = ShoulderArmLength;
+	CameraBoom->SocketOffset = FVector(ShoulderOffset.X, ShoulderOffset.Y * CurrentShoulderSide, ShoulderOffset.Z);
+}
+
+void APrototipoShooterCharacter::DoSwapShoulder()
+{
+	bRightShoulder = !bRightShoulder;
 }
