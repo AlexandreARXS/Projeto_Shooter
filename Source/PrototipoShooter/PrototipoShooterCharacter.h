@@ -64,6 +64,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> FireAction;
 
+	/** Recarregar. Se ficar vazio, e criado em codigo (tecla R / botao RB do controle) */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> ReloadAction;
+
 	/** Interagir. Se ficar vazio, e criado em codigo (tecla E / botao X do controle) */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> InteractAction;
@@ -182,6 +186,31 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Tiro")
 	float AimFireSpread = 0.4f;
 
+	// ---------- Municao ----------
+
+	/** Balas por pente */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	int32 MagazineSize = 40;
+
+	/** Tempo de recarga, em segundos (nao da para atirar durante a recarga) */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float ReloadTime = 2.5f;
+
+	/** Balas no pente agora */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Tiro")
+	int32 CurrentAmmo = 40;
+
+	bool bIsReloading = false;
+	float ReloadStartTime = -1.f;
+	FTimerHandle ReloadTimer;
+
+	/** Pontuacao total do jogador */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Pontos")
+	int32 Score = 0;
+
+	/** Termina a recarga e enche o pente */
+	void FinishReload();
+
 	bool bFireHeld = false;
 	bool bInCombatStance = false;
 
@@ -293,6 +322,29 @@ public:
 	/** Quanto a arma esta levantada (0 a 1), usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetCombatAlpha() const { return CombatAlpha; }
+
+	/** Recarrega (se o pente nao estiver cheio) */
+	UFUNCTION(BlueprintCallable, Category="Tiro")
+	virtual void DoReload();
+
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	int32 GetCurrentAmmo() const { return CurrentAmmo; }
+
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	int32 GetMagazineSize() const { return MagazineSize; }
+
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	bool IsReloading() const { return bIsReloading; }
+
+	/** Progresso da recarga (0 a 1), usado pela HUD */
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	float GetReloadProgress() const;
+
+	/** Soma pontos (chamado pelos alvos) */
+	void AddScore(int32 Points);
+
+	UFUNCTION(BlueprintPure, Category="Pontos")
+	int32 GetScore() const { return Score; }
 
 	/** Interage com o objeto ao alcance */
 	UFUNCTION(BlueprintCallable, Category="Interacao")

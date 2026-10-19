@@ -1,6 +1,7 @@
 // Alvo circular de treino: mostra feedback quando e atingido
 
 #include "ShooterTarget.h"
+#include "PrototipoShooterCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/DamageEvents.h"
@@ -120,6 +121,12 @@ float AShooterTarget::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 
 	Hits++;
 	Score += Points;
+
+	// soma os pontos no placar do jogador que atirou
+	if (APrototipoShooterCharacter* Shooter = Cast<APrototipoShooterCharacter>(DamageCauser))
+	{
+		Shooter->AddScore(Points);
+	}
 
 	// feedback: clarao amarelo + balanco
 	FlashTimeLeft = 0.12f;

@@ -1,4 +1,4 @@
-// HUD do shooter: mira, marcador de acerto, aviso de interacao e mensagens
+// HUD do shooter: mira, marcador de acerto, aviso de interacao, mensagens, pontos e municao
 
 #pragma once
 
@@ -39,6 +39,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Mira")
 	float HitMarkerDuration = 0.25f;
 
+	/** Distancia dos paineis ate a borda da tela */
+	UPROPERTY(EditAnywhere, Category="Painel")
+	float HudMargin = 40.f;
+
+	/** Abaixo deste numero de balas, o contador fica laranja */
+	UPROPERTY(EditAnywhere, Category="Painel")
+	int32 LowAmmoThreshold = 10;
+
 public:
 
 	virtual void DrawHUD() override;
@@ -48,4 +56,7 @@ private:
 	void DrawCrosshair(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawInteraction(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawCenteredText(const FString& Text, float CenterY, const FLinearColor& Color, float Scale);
+	void DrawScore(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawAmmo(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bAlignRight);
 };

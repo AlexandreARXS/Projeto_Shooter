@@ -24,6 +24,80 @@ void AShooterHUD::DrawHUD()
 
 	DrawInteraction(ShooterCharacter);
 	DrawCrosshair(ShooterCharacter);
+	DrawScore(ShooterCharacter);
+	DrawAmmo(ShooterCharacter);
+}
+
+void AShooterHUD::DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bAlignRight)
+{
+	UFont* Font = GEngine ? GEngine->GetLargeFont() : nullptr;
+
+	if (bAlignRight)
+	{
+		float Width = 0.f;
+		float Height = 0.f;
+		GetTextSize(Text, Width, Height, Font, Scale);
+		X -= Width;
+	}
+
+	// sombra para ler em qualquer fundo
+	DrawText(Text, FLinearColor(0.f, 0.f, 0.f, 0.8f), X + 2.f, Y + 2.f, Font, Scale);
+	DrawText(Text, Color, X, Y, Font, Scale);
+}
+
+void AShooterHUD::DrawScore(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	// canto superior esquerdo
+	const float X = HudMargin;
+	const float Y = HudMargin;
+
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), X - 12.f, Y - 8.f, 230.f, 62.f);
+	DrawTextAt(TEXT("PONTOS"), X, Y, FLinearColor(0.75f, 0.75f, 0.75f, 1.f), 0.9f, false);
+	DrawTextAt(FString::FromInt(ShooterCharacter->GetScore()), X, Y + 18.f, FLinearColor(1.f, 0.85f, 0.2f, 1.f), 1.8f, false);
+}
+
+void AShooterHUD::DrawAmmo(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	// canto inferior direito
+	const float Right = Canvas->ClipX - HudMargin;
+	const float Bottom = Canvas->ClipY - HudMargin;
+
+	const int32 Ammo = ShooterCharacter->GetCurrentAmmo();
+	const int32 Magazine = ShooterCharacter->GetMagazineSize();
+
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), Right - 230.f, Bottom - 92.f, 242.f, 100.f);
+
+	// cor das balas: branco, laranja quando esta acabando, vermelho quando vazio
+	FLinearColor AmmoColor = FLinearColor::White;
+	if (Ammo <= 0)
+	{
+		AmmoColor = FLinearColor(1.f, 0.2f, 0.15f, 1.f);
+	}
+	else if (Ammo <= LowAmmoThreshold)
+	{
+		AmmoColor = FLinearColor(1.f, 0.6f, 0.1f, 1.f);
+	}
+
+	// "32 / 40"
+	DrawTextAt(FString::Printf(TEXT("/ %d"), Magazine), Right, Bottom - 50.f, FLinearColor(0.75f, 0.75f, 0.75f, 1.f), 1.2f, true);
+	DrawTextAt(FString::FromInt(Ammo), Right - 62.f, Bottom - 74.f, AmmoColor, 2.4f, true);
+
+	// recarga: texto e barra de progresso
+	if (ShooterCharacter->IsReloading())
+	{
+		const float BarWidth = 206.f;
+		const float BarHeight = 6.f;
+		const float BarX = Right - BarWidth;
+		const float BarY = Bottom - 6.f;
+
+		DrawTextAt(TEXT("RECARREGANDO"), Right - BarWidth, Bottom - 24.f, FLinearColor(1.f, 0.85f, 0.2f, 1.f), 0.9f, false);
+		DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.2f), BarX, BarY, BarWidth, BarHeight);
+		DrawRect(FLinearColor(1.f, 0.85f, 0.2f, 1.f), BarX, BarY, BarWidth * ShooterCharacter->GetReloadProgress(), BarHeight);
+	}
+	else if (Ammo < Magazine)
+	{
+		DrawTextAt(TEXT("[R] Recarregar"), Right - 206.f, Bottom - 24.f, FLinearColor(0.75f, 0.75f, 0.75f, 0.8f), 0.9f, false);
+	}
 }
 
 void AShooterHUD::DrawCenteredText(const FString& Text, float CenterY, const FLinearColor& Color, float Scale)

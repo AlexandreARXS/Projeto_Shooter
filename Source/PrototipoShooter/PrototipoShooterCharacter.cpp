@@ -94,6 +94,7 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoInteract);
+		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoReload);
 	}
 	else
 	{
@@ -181,6 +182,12 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		FireAction = NewObject<UInputAction>(this, TEXT("IA_Atirar"));
 	}
 
+	// cria a acao de recarga se ela nao foi definida no Blueprint
+	if (!ReloadAction)
+	{
+		ReloadAction = NewObject<UInputAction>(this, TEXT("IA_Recarregar"));
+	}
+
 	// cria a acao de interacao se ela nao foi definida no Blueprint
 	if (!InteractAction)
 	{
@@ -198,6 +205,8 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext->MapKey(FireAction, EKeys::LeftMouseButton);
 		ShooterMappingContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
 		ShooterMappingContext->MapKey(InteractAction, EKeys::E);
+		ShooterMappingContext->MapKey(ReloadAction, EKeys::R);
+		ShooterMappingContext->MapKey(ReloadAction, EKeys::Gamepad_RightShoulder);
 		ShooterMappingContext->MapKey(InteractAction, EKeys::Gamepad_FaceButton_Left);
 	}
 
@@ -224,6 +233,9 @@ void APrototipoShooterCharacter::BeginPlay()
 	DefaultFOV = FollowCamera->FieldOfView;
 	DefaultWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
 	DefaultRotationRate = GetCharacterMovement()->RotationRate;
+
+	// comeca com o pente cheio
+	CurrentAmmo = MagazineSize;
 
 	// cria a arma
 	if (!WeaponClass)
@@ -269,6 +281,7 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 void APrototipoShooterCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(FireTimer);
+	GetWorldTimerManager().ClearTimer(ReloadTimer);
 
 	if (Weapon)
 	{
@@ -337,6 +350,19 @@ void APrototipoShooterCharacter::DoFireStart()
 {
 	bFireHeld = true;
 
+	// recarregando: o tiro volta sozinho quando a recarga terminar, se o gatilho continuar apertado
+	if (bIsReloading)
+	{
+		return;
+	}
+
+	// pente vazio: recarrega
+	if (CurrentAmmo <= 0)
+	{
+		DoReload();
+		return;
+	}
+
 	// respeita a cadencia mesmo clicando rapido
 	const float Now = GetWorld()->GetTimeSeconds();
 	const float Wait = FMath::Max(0.f, LastShotTime + FireInterval - Now);
@@ -366,7 +392,16 @@ void APrototipoShooterCharacter::FireShot()
 		return;
 	}
 
+	// sem tiro durante a recarga ou com o pente vazio
+	if (bIsReloading || CurrentAmmo <= 0)
+	{
+		GetWorldTimerManager().ClearTimer(FireTimer);
+		DoReload();
+		return;
+	}
+
 	LastShotTime = World->GetTimeSeconds();
+	CurrentAmmo--;
 
 	// 1) linha a partir da camera, passando pelo centro da tela (com imprecisao)
 	const float SpreadDegrees = FMath::Lerp(HipFireSpread, AimFireSpread, AimAlpha);
@@ -408,6 +443,56 @@ void APrototipoShooterCharacter::FireShot()
 			}
 		}
 	}
+
+	// acabou o pente: para de atirar e recarrega sozinho
+	if (CurrentAmmo <= 0)
+	{
+		GetWorldTimerManager().ClearTimer(FireTimer);
+		DoReload();
+	}
+}
+
+void APrototipoShooterCharacter::DoReload()
+{
+	// ja recarregando ou pente cheio
+	if (bIsReloading || CurrentAmmo >= MagazineSize)
+	{
+		return;
+	}
+
+	bIsReloading = true;
+	ReloadStartTime = GetWorld()->GetTimeSeconds();
+
+	GetWorldTimerManager().ClearTimer(FireTimer);
+	GetWorldTimerManager().SetTimer(ReloadTimer, this, &APrototipoShooterCharacter::FinishReload, ReloadTime, false);
+}
+
+void APrototipoShooterCharacter::FinishReload()
+{
+	bIsReloading = false;
+	CurrentAmmo = MagazineSize;
+
+	// se o gatilho continua apertado, volta a atirar
+	if (bFireHeld)
+	{
+		FireShot();
+		GetWorldTimerManager().SetTimer(FireTimer, this, &APrototipoShooterCharacter::FireShot, FireInterval, true);
+	}
+}
+
+float APrototipoShooterCharacter::GetReloadProgress() const
+{
+	if (!bIsReloading || ReloadTime <= 0.f)
+	{
+		return 0.f;
+	}
+
+	return FMath::Clamp((GetWorld()->GetTimeSeconds() - ReloadStartTime) / ReloadTime, 0.f, 1.f);
+}
+
+void APrototipoShooterCharacter::AddScore(int32 Points)
+{
+	Score += Points;
 }
 
 void APrototipoShooterCharacter::ApplyShoulderCamera()
