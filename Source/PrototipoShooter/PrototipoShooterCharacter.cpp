@@ -13,6 +13,12 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputCoreTypes.h"
+#include "ShooterWeapon.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/DamageType.h"
+#include "DrawDebugHelpers.h"
+#include "TimerManager.h"
+#include "Engine/World.h"
 #include "PrototipoShooter.h"
 
 APrototipoShooterCharacter::APrototipoShooterCharacter()
@@ -54,6 +60,9 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 	CameraBoom->TargetArmLength = ShoulderArmLength;
 	CameraBoom->SocketOffset = ShoulderOffset;
 
+	// arma padrao
+	WeaponClass = AShooterWeapon::StaticClass();
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -80,6 +89,9 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoAimStart);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoAimEnd);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoAimEnd);
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoFireStart);
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoFireEnd);
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoFireEnd);
 	}
 	else
 	{
@@ -161,6 +173,12 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		AimAction = NewObject<UInputAction>(this, TEXT("IA_Mirar"));
 	}
 
+	// cria a acao de tiro se ela nao foi definida no Blueprint
+	if (!FireAction)
+	{
+		FireAction = NewObject<UInputAction>(this, TEXT("IA_Atirar"));
+	}
+
 	// cria o mapping context com as teclas do shooter
 	if (!ShooterMappingContext)
 	{
@@ -169,6 +187,8 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext->MapKey(ShoulderSwapAction, EKeys::Gamepad_RightThumbstick);
 		ShooterMappingContext->MapKey(AimAction, EKeys::RightMouseButton);
 		ShooterMappingContext->MapKey(AimAction, EKeys::Gamepad_LeftTrigger);
+		ShooterMappingContext->MapKey(FireAction, EKeys::LeftMouseButton);
+		ShooterMappingContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
 	}
 
 	// registra o mapping context no jogador local
@@ -195,6 +215,19 @@ void APrototipoShooterCharacter::BeginPlay()
 	DefaultWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
 	DefaultRotationRate = GetCharacterMovement()->RotationRate;
 
+	// cria a arma
+	if (!WeaponClass)
+	{
+		WeaponClass = AShooterWeapon::StaticClass();
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Weapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
+	UpdateWeaponTransform();
+
 	CameraBoom->bEnableCameraLag = CameraLagSpeed > 0.f;
 	CameraBoom->CameraLagSpeed = CameraLagSpeed;
 
@@ -215,7 +248,156 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 	// aproxima/afasta a camera ao entrar/sair da mira
 	AimAlpha = FMath::FInterpTo(AimAlpha, bIsAiming ? 1.f : 0.f, DeltaSeconds, AimInterpSpeed);
 
+	// levanta/abaixa a arma
+	UpdateCombatStance();
+	CombatAlpha = FMath::FInterpTo(CombatAlpha, bInCombatStance ? 1.f : 0.f, DeltaSeconds, CombatInterpSpeed);
+
 	ApplyShoulderCamera();
+	UpdateWeaponTransform();
+}
+
+void APrototipoShooterCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearTimer(FireTimer);
+
+	if (Weapon)
+	{
+		Weapon->Destroy();
+		Weapon = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void APrototipoShooterCharacter::UpdateCombatStance()
+{
+	// em combate: mirando, segurando o gatilho ou logo depois de um tiro
+	const float Now = GetWorld()->GetTimeSeconds();
+	const bool bWantsCombat = bIsAiming || bFireHeld || (Now - LastShotTime < CombatStanceDuration);
+
+	if (bWantsCombat == bInCombatStance)
+	{
+		return;
+	}
+
+	bInCombatStance = bWantsCombat;
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (bInCombatStance)
+	{
+		// o personagem passa a encarar a direcao da camera
+		Movement->bOrientRotationToMovement = false;
+		Movement->bUseControllerDesiredRotation = true;
+		Movement->RotationRate = FRotator(0.f, AimRotationRate, 0.f);
+	}
+	else
+	{
+		// volta ao movimento livre
+		Movement->bOrientRotationToMovement = true;
+		Movement->bUseControllerDesiredRotation = false;
+		Movement->RotationRate = DefaultRotationRate;
+	}
+}
+
+void APrototipoShooterCharacter::UpdateWeaponTransform()
+{
+	if (!Weapon)
+	{
+		return;
+	}
+
+	const FTransform ActorTransform = GetActorTransform();
+
+	// descanso: na cintura, cano para baixo
+	const FVector RestLocation = ActorTransform.TransformPosition(WeaponRestOffset);
+	const FQuat RestRotation = ActorTransform.TransformRotation(WeaponRestRotation.Quaternion());
+
+	// tiro: no ombro, cano apontando para onde a camera mira
+	const FVector AimLocation = ActorTransform.TransformPosition(WeaponAimOffset);
+	const FVector AimTarget = FollowCamera->GetComponentLocation() + FollowCamera->GetForwardVector() * 5000.f;
+	const FQuat AimRotation = (AimTarget - AimLocation).Rotation().Quaternion();
+
+	const FVector Location = FMath::Lerp(RestLocation, AimLocation, CombatAlpha);
+	const FQuat Rotation = FQuat::Slerp(RestRotation, AimRotation, CombatAlpha);
+
+	Weapon->SetActorLocationAndRotation(Location, Rotation);
+}
+
+void APrototipoShooterCharacter::DoFireStart()
+{
+	bFireHeld = true;
+
+	// respeita a cadencia mesmo clicando rapido
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float Wait = FMath::Max(0.f, LastShotTime + FireInterval - Now);
+
+	if (Wait <= 0.f)
+	{
+		FireShot();
+		GetWorldTimerManager().SetTimer(FireTimer, this, &APrototipoShooterCharacter::FireShot, FireInterval, true);
+	}
+	else
+	{
+		GetWorldTimerManager().SetTimer(FireTimer, this, &APrototipoShooterCharacter::FireShot, FireInterval, true, Wait);
+	}
+}
+
+void APrototipoShooterCharacter::DoFireEnd()
+{
+	bFireHeld = false;
+	GetWorldTimerManager().ClearTimer(FireTimer);
+}
+
+void APrototipoShooterCharacter::FireShot()
+{
+	UWorld* World = GetWorld();
+	if (!World || !Weapon)
+	{
+		return;
+	}
+
+	LastShotTime = World->GetTimeSeconds();
+
+	// 1) linha a partir da camera, passando pelo centro da tela (com imprecisao)
+	const float SpreadDegrees = FMath::Lerp(HipFireSpread, AimFireSpread, AimAlpha);
+	const FVector CameraLocation = FollowCamera->GetComponentLocation();
+	const FVector CameraDirection = FMath::VRandCone(FollowCamera->GetForwardVector(), FMath::DegreesToRadians(SpreadDegrees));
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ShooterFire), true);
+	Params.AddIgnoredActor(this);
+	Params.AddIgnoredActor(Weapon);
+
+	FHitResult CameraHit;
+	const FVector CameraEnd = CameraLocation + CameraDirection * FireRange;
+	const bool bCameraHit = World->LineTraceSingleByChannel(CameraHit, CameraLocation, CameraEnd, ECC_Visibility, Params);
+	const FVector AimPoint = bCameraHit ? CameraHit.ImpactPoint : CameraEnd;
+
+	// 2) linha a partir do cano da arma ate o ponto mirado (respeita obstaculos na frente da arma)
+	const FVector Muzzle = Weapon->GetMuzzleLocation();
+	const FVector ShotDirection = (AimPoint - Muzzle).GetSafeNormal();
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, Muzzle, AimPoint + ShotDirection * 10.f, ECC_Visibility, Params);
+	const FVector EndPoint = bHit ? Hit.ImpactPoint : AimPoint;
+
+	// efeitos provisorios: rastro do tiro, clarao no cano e marca no impacto
+	DrawDebugLine(World, Muzzle, EndPoint, FColor(255, 220, 80), false, 0.06f, 0, 1.5f);
+	DrawDebugSphere(World, Muzzle, 5.f, 6, FColor::Orange, false, 0.04f);
+
+	if (bHit)
+	{
+		DrawDebugPoint(World, Hit.ImpactPoint, 10.f, FColor::Red, false, 1.f);
+
+		// aplica dano em quem foi atingido
+		if (AActor* HitActor = Hit.GetActor())
+		{
+			const float Applied = UGameplayStatics::ApplyPointDamage(HitActor, ShotDamage, ShotDirection, Hit, GetController(), this, UDamageType::StaticClass());
+			if (Applied > 0.f)
+			{
+				LastHitConfirmTime = LastShotTime;
+			}
+		}
+	}
 }
 
 void APrototipoShooterCharacter::ApplyShoulderCamera()
@@ -231,26 +413,15 @@ void APrototipoShooterCharacter::ApplyShoulderCamera()
 
 void APrototipoShooterCharacter::DoAimStart()
 {
+	// a rotacao do personagem e tratada em UpdateCombatStance
 	bIsAiming = true;
-
-	// o personagem passa a encarar a direcao da camera, em vez da direcao do movimento
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->bOrientRotationToMovement = false;
-	Movement->bUseControllerDesiredRotation = true;
-	Movement->RotationRate = FRotator(0.f, AimRotationRate, 0.f);
-	Movement->MaxWalkSpeed = AimWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = AimWalkSpeed;
 }
 
 void APrototipoShooterCharacter::DoAimEnd()
 {
 	bIsAiming = false;
-
-	// volta ao movimento livre
-	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->bOrientRotationToMovement = true;
-	Movement->bUseControllerDesiredRotation = false;
-	Movement->RotationRate = DefaultRotationRate;
-	Movement->MaxWalkSpeed = DefaultWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = DefaultWalkSpeed;
 }
 
 void APrototipoShooterCharacter::DoSwapShoulder()

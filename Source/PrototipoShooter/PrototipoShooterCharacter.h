@@ -11,6 +11,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
+class AShooterWeapon;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -57,6 +58,10 @@ protected:
 	/** Mira (segurar). Se ficar vazio, e criado em codigo (botao direito do mouse / gatilho esquerdo) */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> AimAction;
+
+	/** Atirar (segurar = automatico). Se ficar vazio, e criado em codigo (botao esquerdo do mouse / gatilho direito) */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> FireAction;
 
 	/** Mapping context do shooter, criado em codigo */
 	UPROPERTY(Transient)
@@ -120,6 +125,68 @@ protected:
 	/** 0 = sem mira, 1 = mira completa (interpolado) */
 	float AimAlpha = 0.f;
 
+	// ---------- Arma ----------
+
+	/** Classe da arma criada no BeginPlay */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	TSubclassOf<AShooterWeapon> WeaponClass;
+
+	/** Arma atual */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Arma")
+	TObjectPtr<AShooterWeapon> Weapon;
+
+	/** Posicao de descanso, relativa ao personagem: X = frente, Y = direita, Z = altura (0 = quadril) */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	FVector WeaponRestOffset = FVector(28.f, 24.f, -8.f);
+
+	/** Rotacao de descanso (Pitch negativo = cano apontando para baixo) */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	FRotator WeaponRestRotation = FRotator(-40.f, -10.f, 0.f);
+
+	/** Posicao de tiro, relativa ao personagem (altura do ombro direito) */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	FVector WeaponAimOffset = FVector(38.f, 20.f, 48.f);
+
+	/** Por quanto tempo a arma continua levantada depois do ultimo tiro */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	float CombatStanceDuration = 1.f;
+
+	/** Velocidade da transicao entre descanso e tiro */
+	UPROPERTY(EditAnywhere, Category="Arma")
+	float CombatInterpSpeed = 14.f;
+
+	// ---------- Tiro ----------
+
+	/** Tempo entre tiros (0.12 = ~8 tiros por segundo) */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float FireInterval = 0.12f;
+
+	/** Dano por tiro */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float ShotDamage = 20.f;
+
+	/** Alcance maximo do tiro */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float FireRange = 10000.f;
+
+	/** Imprecisao sem mirar, em graus */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float HipFireSpread = 2.5f;
+
+	/** Imprecisao mirando, em graus */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float AimFireSpread = 0.4f;
+
+	bool bFireHeld = false;
+	bool bInCombatStance = false;
+
+	/** 0 = arma em descanso, 1 = arma em posicao de tiro (interpolado) */
+	float CombatAlpha = 0.f;
+
+	float LastShotTime = -100.f;
+	float LastHitConfirmTime = -100.f;
+	FTimerHandle FireTimer;
+
 	/** Valores originais, guardados no BeginPlay para restaurar ao sair da mira */
 	float DefaultFOV = 90.f;
 	float DefaultWalkSpeed = 500.f;
@@ -143,6 +210,17 @@ protected:
 
 	/** Aplica a posicao da camera conforme o ombro atual */
 	void ApplyShoulderCamera();
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Liga/desliga a postura de combate (personagem encara a camera) */
+	void UpdateCombatStance();
+
+	/** Posiciona a arma entre descanso e tiro */
+	void UpdateWeaponTransform();
+
+	/** Dispara um tiro */
+	void FireShot();
 
 protected:
 
@@ -189,6 +267,22 @@ public:
 	/** Quanto da mira esta aplicado (0 a 1), usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Mira")
 	float GetAimAlpha() const { return AimAlpha; }
+
+	/** Comeca a atirar */
+	UFUNCTION(BlueprintCallable, Category="Tiro")
+	virtual void DoFireStart();
+
+	/** Para de atirar */
+	UFUNCTION(BlueprintCallable, Category="Tiro")
+	virtual void DoFireEnd();
+
+	/** Quanto a arma esta levantada (0 a 1), usado pela HUD */
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	float GetCombatAlpha() const { return CombatAlpha; }
+
+	/** Momento do ultimo acerto confirmado, usado pela HUD */
+	UFUNCTION(BlueprintPure, Category="Tiro")
+	float GetLastHitConfirmTime() const { return LastHitConfirmTime; }
 
 public:
 

@@ -29,6 +29,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Mira")
 	float CrosshairThickness = 2.f;
 
+	/** Cor do marcador de acerto */
+	UPROPERTY(EditAnywhere, Category="Mira")
+	FLinearColor HitMarkerColor = FLinearColor(1.f, 0.15f, 0.1f, 1.f);
+
+	/** Quanto tempo o marcador de acerto fica na tela */
+	UPROPERTY(EditAnywhere, Category="Mira")
+	float HitMarkerDuration = 0.25f;
+
 public:
 
 	virtual void DrawHUD() override;

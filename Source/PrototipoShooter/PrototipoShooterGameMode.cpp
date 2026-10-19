@@ -2,9 +2,84 @@
 
 #include "PrototipoShooterGameMode.h"
 #include "ShooterHUD.h"
+#include "ShooterTarget.h"
+#include "EngineUtils.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerStart.h"
 
 APrototipoShooterGameMode::APrototipoShooterGameMode()
 {
 	// HUD com a mira na tela
 	HUDClass = AShooterHUD::StaticClass();
+}
+
+void APrototipoShooterGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (bSpawnTestTargets)
+	{
+		SpawnTestTargets();
+	}
+}
+
+void APrototipoShooterGameMode::SpawnTestTargets()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// centro = ponto de inicio do jogador
+	FVector Center = FVector::ZeroVector;
+	for (TActorIterator<APlayerStart> It(World); It; ++It)
+	{
+		Center = It->GetActorLocation();
+		break;
+	}
+
+	// Norte = +X, Sul = -X, Leste = +Y, Oeste = -Y (eixos do mapa)
+	struct FTargetSpot
+	{
+		const TCHAR* Name;
+		FVector Direction;
+	};
+
+	const FTargetSpot Spots[] =
+	{
+		{ TEXT("Norte"), FVector(1.f, 0.f, 0.f) },
+		{ TEXT("Sul"),   FVector(-1.f, 0.f, 0.f) },
+		{ TEXT("Leste"), FVector(0.f, 1.f, 0.f) },
+		{ TEXT("Oeste"), FVector(0.f, -1.f, 0.f) },
+	};
+
+	for (const FTargetSpot& Spot : Spots)
+	{
+		FVector Location = Center + Spot.Direction * TargetDistance;
+
+		// procura o chao embaixo do ponto
+		FHitResult Ground;
+		const FVector TraceStart(Location.X, Location.Y, Center.Z + 300.f);
+		const FVector TraceEnd(Location.X, Location.Y, Center.Z - 3000.f);
+		if (World->LineTraceSingleByChannel(Ground, TraceStart, TraceEnd, ECC_Visibility))
+		{
+			Location.Z = Ground.ImpactPoint.Z;
+		}
+		else
+		{
+			Location.Z = Center.Z - 90.f;
+		}
+
+		// o alvo fica de frente para o centro
+		const FRotator Facing(0.f, (-Spot.Direction).Rotation().Yaw, 0.f);
+
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		if (AShooterTarget* Target = World->SpawnActor<AShooterTarget>(AShooterTarget::StaticClass(), Location, Facing, Params))
+		{
+			Target->TargetName = Spot.Name;
+		}
+	}
 }
