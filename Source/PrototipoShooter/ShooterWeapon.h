@@ -1,3 +1,4 @@
+// PROVISORIO: Arma, modelo feito de cubos e cilindros. Trocar por modelo 3D de rifle.
 // Arma provisoria, montada com formas basicas da engine
 
 #pragma once

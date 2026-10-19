@@ -71,6 +71,7 @@ AShooterEnemy::AShooterEnemy()
 	BodyHitbox->SetRelativeLocation(FVector(0.f, 0.f, -24.f));
 	SetupHitbox(BodyHitbox);
 
+	// PROVISORIO: Inimigo, hitboxes aproximadas (capsula do corpo + esfera da cabeca). Ajustar tamanhos ou usar o Physics Asset.
 	// cabeca: presa ao osso "head"
 	HeadHitbox = CreateDefaultSubobject<USphereComponent>(TEXT("HeadHitbox"));
 	HeadHitbox->SetupAttachment(EnemyMesh, TEXT("head"));
@@ -131,6 +132,7 @@ float AShooterEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEv
 		Shooter->NotifyEnemyHit(bHeadshot, bKilled, bMelee);
 	}
 
+	// PROVISORIO: Inimigo, mensagem de dano com AddOnScreenDebugMessage (para conferir a contagem de tiros).
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.5f, bHeadshot ? FColor::Yellow : FColor::White,

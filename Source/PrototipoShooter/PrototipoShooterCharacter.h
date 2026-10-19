@@ -141,6 +141,7 @@ protected:
 	/** 0 = sem mira, 1 = mira completa (interpolado) */
 	float AimAlpha = 0.f;
 
+	// PROVISORIO: Arma, poses de descanso/tiro por offset fixo (as maos nao seguram a arma). Trocar por animacoes de rifle + socket na mao.
 	// ---------- Arma ----------
 
 	/** Classe da arma criada no BeginPlay */
@@ -241,6 +242,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
 	float MeleeMaxDuration = 1.f;
 
+	// PROVISORIO: Corpo-a-corpo, animacao do soco desarmado do template (MM_Attack_01). Trocar por golpe com a arma.
 	/** Animacao do golpe */
 	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
 	TObjectPtr<UAnimSequence> MeleeAnimation;
@@ -270,6 +272,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Cobertura")
 	float CoverCrouchSpeed = 200.f;
 
+	// PROVISORIO: Agachamento, animacao provisoria (quadro de MM_Land). Trocar por animacao de agachar real (ex.: Lyra).
 	/**
 	 * Pose agachada PROVISORIA: o template nao tem animacao de agachar,
 	 * entao usamos um quadro com os joelhos dobrados da animacao de aterrissagem

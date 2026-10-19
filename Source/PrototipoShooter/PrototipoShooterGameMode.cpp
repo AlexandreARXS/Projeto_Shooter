@@ -42,6 +42,7 @@ void APrototipoShooterGameMode::BeginPlay()
 	}
 }
 
+// PROVISORIO: Mapa de teste, alvos/caixa/inimigo/cobertura criados por codigo em posicoes fixas. Trocar pelo greybox/level design.
 void APrototipoShooterGameMode::SpawnTestTargets()
 {
 	UWorld* World = GetWorld();
@@ -99,6 +100,7 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 
 	if (AShooterInteractable* Box = World->SpawnActor<AShooterInteractable>(AShooterInteractable::StaticClass(), BoxLocation, FRotator::ZeroRotator, BoxParams))
 	{
+		// PROVISORIO: Interacao, mensagem de teste. Trocar pela acao real (sair da fase, abrir porta...).
 		// "Voce saira daqui", com acentos
 		Box->Message = FString(TEXT("Voc\u00EA sair\u00E1 daqui"));
 	}

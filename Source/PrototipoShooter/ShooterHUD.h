@@ -8,6 +8,7 @@
 
 class APrototipoShooterCharacter;
 
+// PROVISORIO: HUD, desenhada direto no Canvas com a fonte padrao da engine. Trocar por widgets UMG com arte propria.
 UCLASS()
 class AShooterHUD : public AHUD
 {

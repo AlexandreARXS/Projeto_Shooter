@@ -387,6 +387,7 @@ void APrototipoShooterCharacter::UpdateWeaponTransform()
 	const FVector RestLocation = ActorTransform.TransformPosition(WeaponRestOffset);
 	const FQuat RestRotation = ActorTransform.TransformRotation(WeaponRestRotation.Quaternion());
 
+	// PROVISORIO: Arma, posicao calculada no codigo em vez de presa na mao do personagem.
 	// tiro: no ombro, cano apontando para onde a camera mira
 	const FVector AimLocation = ActorTransform.TransformPosition(WeaponAimOffset);
 	const FVector AimTarget = FollowCamera->GetComponentLocation() + FollowCamera->GetForwardVector() * 5000.f;
@@ -483,6 +484,7 @@ void APrototipoShooterCharacter::FireShot()
 	const bool bHit = World->LineTraceSingleByChannel(Hit, Muzzle, AimPoint + ShotDirection * 10.f, ECC_Visibility, Params);
 	const FVector EndPoint = bHit ? Hit.ImpactPoint : AimPoint;
 
+	// PROVISORIO: Tiro, efeitos com DrawDebug (rastro, clarao e impacto). Trocar por Niagara + som.
 	// efeitos provisorios: rastro do tiro, clarao no cano e marca no impacto
 	DrawDebugLine(World, Muzzle, EndPoint, FColor(255, 220, 80), false, 0.06f, 0, 1.5f);
 	DrawDebugSphere(World, Muzzle, 5.f, 6, FColor::Orange, false, 0.04f);
@@ -597,6 +599,7 @@ void APrototipoShooterCharacter::DoMelee()
 		SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
 	}
 
+	// PROVISORIO: Corpo-a-corpo, troca para modo single-node (da um tranco ao voltar). Trocar por Anim Montage no Animation Blueprint.
 	// animacao do soco (substitui a animacao normal ate o fim do golpe)
 	float Duration = MeleeMaxDuration;
 	if (MeleeAnimation)
@@ -632,6 +635,7 @@ void APrototipoShooterCharacter::PerformMeleeHit()
 	TArray<FHitResult> Hits;
 	World->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(MeleeRadius), Params);
 
+	// PROVISORIO: Corpo-a-corpo, efeito com DrawDebug. Trocar por efeito/som de impacto.
 	// efeito provisorio: mostra o alcance do golpe
 	DrawDebugLine(World, Start, End, FColor::Cyan, false, 0.15f, 0, 3.f);
 
@@ -710,6 +714,7 @@ void APrototipoShooterCharacter::UpdateCover()
 		UnCrouch();
 	}
 
+	// PROVISORIO: Agachamento, animacao provisoria (quadro congelado de MM_Land, os pes deslizam ao andar).
 	// pose agachada provisoria enquanto a capsula estiver agachada
 	const bool bWantsCoverPose = bIsCrouched && !bIsMeleeing && CoverPoseAnimation;
 

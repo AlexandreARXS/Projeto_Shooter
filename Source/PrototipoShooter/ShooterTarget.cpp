@@ -134,6 +134,7 @@ float AShooterTarget::TakeDamage(float DamageAmount, FDamageEvent const& DamageE
 	WobbleTime = 0.f;
 	SetRingColors(true);
 
+	// PROVISORIO: Alvo, mensagem com AddOnScreenDebugMessage (so aparece em builds de desenvolvimento). Trocar por widget na HUD.
 	// feedback: mensagem na tela
 	if (GEngine)
 	{

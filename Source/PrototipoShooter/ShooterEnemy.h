@@ -10,6 +10,7 @@ class UCapsuleComponent;
 class USphereComponent;
 class UAnimSequence;
 
+// PROVISORIO: Inimigo, sem IA (fica parado). Adicionar AIController + comportamento (andar, cobertura, atirar).
 UCLASS()
 class AShooterEnemy : public ACharacter
 {
@@ -56,6 +57,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Inimigo")
 	float HeadshotMultiplier = 2.5f;
 
+	// PROVISORIO: Inimigo, reaparece sozinho para facilitar os testes. Remover quando houver ondas/spawners.
 	/** Segundos ate o inimigo reaparecer depois de abatido (para testes) */
 	UPROPERTY(EditAnywhere, Category="Inimigo")
 	float RespawnDelay = 5.f;

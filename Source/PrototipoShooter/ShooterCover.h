@@ -9,6 +9,7 @@
 class UStaticMeshComponent;
 class UBoxComponent;
 
+// PROVISORIO: Cobertura, bloco cinza de forma basica. Trocar por modelos do cenario (muros, carros, sacos de areia...).
 UCLASS()
 class AShooterCover : public AActor
 {
