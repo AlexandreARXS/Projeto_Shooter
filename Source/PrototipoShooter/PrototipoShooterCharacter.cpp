@@ -15,12 +15,17 @@
 #include "InputCoreTypes.h"
 #include "ShooterWeapon.h"
 #include "ShooterInteractable.h"
+#include "ShooterDamageTypes.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
 #include "DrawDebugHelpers.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 #include "PrototipoShooter.h"
+#include "UObject/ConstructorHelpers.h"
 
 APrototipoShooterCharacter::APrototipoShooterCharacter()
 {
@@ -64,6 +69,13 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 	// arma padrao
 	WeaponClass = AShooterWeapon::StaticClass();
 
+	// animacao do golpe corpo-a-corpo (soco do template)
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> MeleeAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"));
+	if (MeleeAnim.Succeeded())
+	{
+		MeleeAnimation = MeleeAnim.Object;
+	}
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -95,6 +107,7 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoInteract);
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoReload);
+		EnhancedInputComponent->BindAction(MeleeAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoMelee);
 	}
 	else
 	{
@@ -122,6 +135,12 @@ void APrototipoShooterCharacter::Look(const FInputActionValue& Value)
 
 void APrototipoShooterCharacter::DoMove(float Right, float Forward)
 {
+	// parado durante o golpe corpo-a-corpo
+	if (bIsMeleeing)
+	{
+		return;
+	}
+
 	if (GetController() != nullptr)
 	{
 		// find out which way is forward
@@ -182,6 +201,12 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		FireAction = NewObject<UInputAction>(this, TEXT("IA_Atirar"));
 	}
 
+	// cria a acao de corpo-a-corpo se ela nao foi definida no Blueprint
+	if (!MeleeAction)
+	{
+		MeleeAction = NewObject<UInputAction>(this, TEXT("IA_CorpoACorpo"));
+	}
+
 	// cria a acao de recarga se ela nao foi definida no Blueprint
 	if (!ReloadAction)
 	{
@@ -206,6 +231,8 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
 		ShooterMappingContext->MapKey(InteractAction, EKeys::E);
 		ShooterMappingContext->MapKey(ReloadAction, EKeys::R);
+		ShooterMappingContext->MapKey(MeleeAction, EKeys::V);
+		ShooterMappingContext->MapKey(MeleeAction, EKeys::Gamepad_FaceButton_Right);
 		ShooterMappingContext->MapKey(ReloadAction, EKeys::Gamepad_RightShoulder);
 		ShooterMappingContext->MapKey(InteractAction, EKeys::Gamepad_FaceButton_Left);
 	}
@@ -236,6 +263,9 @@ void APrototipoShooterCharacter::BeginPlay()
 
 	// comeca com o pente cheio
 	CurrentAmmo = MagazineSize;
+
+	// guarda a animacao normal para restaurar depois do golpe
+	DefaultAnimClass = GetMesh()->GetAnimClass();
 
 	// cria a arma
 	if (!WeaponClass)
@@ -282,6 +312,8 @@ void APrototipoShooterCharacter::EndPlay(const EEndPlayReason::Type EndPlayReaso
 {
 	GetWorldTimerManager().ClearTimer(FireTimer);
 	GetWorldTimerManager().ClearTimer(ReloadTimer);
+	GetWorldTimerManager().ClearTimer(MeleeHitTimer);
+	GetWorldTimerManager().ClearTimer(MeleeEndTimer);
 
 	if (Weapon)
 	{
@@ -388,6 +420,12 @@ void APrototipoShooterCharacter::FireShot()
 {
 	UWorld* World = GetWorld();
 	if (!World || !Weapon)
+	{
+		return;
+	}
+
+	// sem tiro durante o golpe corpo-a-corpo
+	if (bIsMeleeing)
 	{
 		return;
 	}
@@ -501,14 +539,115 @@ void APrototipoShooterCharacter::AddScore(int32 Points)
 	Score += Points;
 }
 
-void APrototipoShooterCharacter::NotifyEnemyHit(bool bHeadshot, bool bKilled)
+void APrototipoShooterCharacter::NotifyEnemyHit(bool bHeadshot, bool bKilled, bool bMelee)
 {
 	bLastHitWasHeadshot = bHeadshot;
 
 	if (bKilled)
 	{
 		LastKillTime = GetWorld()->GetTimeSeconds();
-		ShowScreenMessage(bHeadshot ? TEXT("ABATIDO NA CABECA!") : TEXT("INIMIGO ABATIDO"), 1.5f);
+
+		const TCHAR* KillMessage = TEXT("INIMIGO ABATIDO");
+		if (bMelee)
+		{
+			KillMessage = TEXT("ABATIDO NO CORPO-A-CORPO!");
+		}
+		else if (bHeadshot)
+		{
+			KillMessage = TEXT("ABATIDO NA CABECA!");
+		}
+		ShowScreenMessage(KillMessage, 1.5f);
+	}
+}
+
+void APrototipoShooterCharacter::DoMelee()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (bIsMeleeing || Now - LastMeleeTime < MeleeCooldown)
+	{
+		return;
+	}
+
+	bIsMeleeing = true;
+	LastMeleeTime = Now;
+
+	// o golpe sai na direcao em que a camera aponta
+	if (Controller)
+	{
+		SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+	}
+
+	// animacao do soco (substitui a animacao normal ate o fim do golpe)
+	float Duration = MeleeMaxDuration;
+	if (MeleeAnimation)
+	{
+		GetMesh()->PlayAnimation(MeleeAnimation, false);
+		Duration = FMath::Min(MeleeAnimation->GetPlayLength(), MeleeMaxDuration);
+	}
+
+	GetWorldTimerManager().SetTimer(MeleeHitTimer, this, &APrototipoShooterCharacter::PerformMeleeHit, MeleeHitDelay, false);
+	GetWorldTimerManager().SetTimer(MeleeEndTimer, this, &APrototipoShooterCharacter::EndMelee, FMath::Max(Duration, MeleeHitDelay + 0.05f), false);
+}
+
+void APrototipoShooterCharacter::PerformMeleeHit()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// varre uma esfera na frente do peito do personagem
+	const FVector Forward = GetActorForwardVector();
+	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, MeleeHeight) + Forward * 30.f;
+	const FVector End = Start + Forward * MeleeRange;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ShooterMelee), false);
+	Params.AddIgnoredActor(this);
+	if (Weapon)
+	{
+		Params.AddIgnoredActor(Weapon);
+	}
+
+	TArray<FHitResult> Hits;
+	World->SweepMultiByChannel(Hits, Start, End, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(MeleeRadius), Params);
+
+	// efeito provisorio: mostra o alcance do golpe
+	DrawDebugLine(World, Start, End, FColor::Cyan, false, 0.15f, 0, 3.f);
+
+	// aplica o dano uma vez em cada ator atingido
+	TSet<AActor*> Damaged;
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor || Damaged.Contains(HitActor))
+		{
+			continue;
+		}
+		Damaged.Add(HitActor);
+
+		bLastHitWasHeadshot = false;
+		const float Applied = UGameplayStatics::ApplyPointDamage(HitActor, MeleeDamage, Forward, Hit, GetController(), this, UShooterMeleeDamageType::StaticClass());
+		if (Applied > 0.f)
+		{
+			LastHitConfirmTime = World->GetTimeSeconds();
+			DrawDebugSphere(World, Hit.ImpactPoint, 12.f, 8, FColor::Cyan, false, 0.3f);
+		}
+	}
+}
+
+void APrototipoShooterCharacter::EndMelee()
+{
+	bIsMeleeing = false;
+
+	// volta para a animacao normal (andar, correr, pular)
+	if (MeleeAnimation)
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		if (DefaultAnimClass)
+		{
+			GetMesh()->SetAnimInstanceClass(DefaultAnimClass);
+		}
 	}
 }
 

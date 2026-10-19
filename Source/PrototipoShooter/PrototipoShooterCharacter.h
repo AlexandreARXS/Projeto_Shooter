@@ -13,6 +13,8 @@ class UInputAction;
 class UInputMappingContext;
 class AShooterWeapon;
 class AShooterInteractable;
+class UAnimSequence;
+class UAnimInstance;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -63,6 +65,10 @@ protected:
 	/** Atirar (segurar = automatico). Se ficar vazio, e criado em codigo (botao esquerdo do mouse / gatilho direito) */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> FireAction;
+
+	/** Golpe corpo-a-corpo. Se ficar vazio, e criado em codigo (tecla V / botao B do controle) */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> MeleeAction;
 
 	/** Recarregar. Se ficar vazio, e criado em codigo (tecla R / botao RB do controle) */
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -204,6 +210,55 @@ protected:
 	float ReloadStartTime = -1.f;
 	FTimerHandle ReloadTimer;
 
+	// ---------- Corpo-a-corpo ----------
+
+	/** Dano do golpe (100 de vida no inimigo = 2 golpes) */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeDamage = 50.f;
+
+	/** Alcance do golpe a partir da frente do personagem */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeRange = 140.f;
+
+	/** Largura do golpe (raio da esfera que varre a frente) */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeRadius = 45.f;
+
+	/** Altura do golpe em relacao ao centro do personagem (peito) */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeHeight = 40.f;
+
+	/** Momento do impacto depois de apertar o botao */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeHitDelay = 0.25f;
+
+	/** Tempo minimo entre golpes */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeCooldown = 0.9f;
+
+	/** Duracao maxima do golpe (o personagem fica parado durante ele) */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	float MeleeMaxDuration = 1.f;
+
+	/** Animacao do golpe */
+	UPROPERTY(EditAnywhere, Category="Corpo-a-corpo")
+	TObjectPtr<UAnimSequence> MeleeAnimation;
+
+	bool bIsMeleeing = false;
+	float LastMeleeTime = -100.f;
+	FTimerHandle MeleeHitTimer;
+	FTimerHandle MeleeEndTimer;
+
+	/** Animation Blueprint normal, restaurado depois do golpe */
+	UPROPERTY()
+	TSubclassOf<UAnimInstance> DefaultAnimClass;
+
+	/** Momento do impacto: procura quem esta na frente e aplica o dano */
+	void PerformMeleeHit();
+
+	/** Fim do golpe: volta a animacao e o movimento */
+	void EndMelee();
+
 	/** Pontuacao total do jogador */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Pontos")
 	int32 Score = 0;
@@ -325,6 +380,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetCombatAlpha() const { return CombatAlpha; }
 
+	/** Golpe corpo-a-corpo */
+	UFUNCTION(BlueprintCallable, Category="Corpo-a-corpo")
+	virtual void DoMelee();
+
+	UFUNCTION(BlueprintPure, Category="Corpo-a-corpo")
+	bool IsMeleeing() const { return bIsMeleeing; }
+
 	/** Recarrega (se o pente nao estiver cheio) */
 	UFUNCTION(BlueprintCallable, Category="Tiro")
 	virtual void DoReload();
@@ -346,7 +408,7 @@ public:
 	void AddScore(int32 Points);
 
 	/** Chamado pelo inimigo atingido (muda o marcador de acerto e avisa o abate) */
-	void NotifyEnemyHit(bool bHeadshot, bool bKilled);
+	void NotifyEnemyHit(bool bHeadshot, bool bKilled, bool bMelee = false);
 
 	/** O ultimo acerto foi na cabeca? usado pela HUD */
 	bool WasLastHitHeadshot() const { return bLastHitWasHeadshot; }

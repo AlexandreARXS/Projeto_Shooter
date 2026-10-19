@@ -2,6 +2,7 @@
 
 #include "ShooterEnemy.h"
 #include "PrototipoShooterCharacter.h"
+#include "ShooterDamageTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -104,9 +105,12 @@ float AShooterEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEv
 
 	Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
+	// golpe corpo-a-corpo? (nao tem bonus de cabeca)
+	const bool bMelee = DamageEvent.DamageTypeClass && DamageEvent.DamageTypeClass->IsChildOf(UShooterMeleeDamageType::StaticClass());
+
 	// acertou a cabeca?
 	bool bHeadshot = false;
-	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	if (!bMelee && DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent& PointEvent = static_cast<const FPointDamageEvent&>(DamageEvent);
 		bHeadshot = PointEvent.HitInfo.GetComponent() == HeadHitbox.Get();
@@ -124,13 +128,13 @@ float AShooterEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEv
 		{
 			Shooter->AddScore(KillPoints);
 		}
-		Shooter->NotifyEnemyHit(bHeadshot, bKilled);
+		Shooter->NotifyEnemyHit(bHeadshot, bKilled, bMelee);
 	}
 
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.5f, bHeadshot ? FColor::Yellow : FColor::White,
-			FString::Printf(TEXT("Inimigo: %s -%.0f   (vida %.0f/%.0f)"), bHeadshot ? TEXT("CABECA") : TEXT("corpo"), Damage, Health, MaxHealth));
+			FString::Printf(TEXT("Inimigo: %s -%.0f   (vida %.0f/%.0f)"), bMelee ? TEXT("GOLPE") : (bHeadshot ? TEXT("CABECA") : TEXT("corpo")), Damage, Health, MaxHealth));
 	}
 
 	if (bKilled)
