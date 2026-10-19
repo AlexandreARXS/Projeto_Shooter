@@ -49,7 +49,7 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// Câmera sobre o ombro (os valores finais são aplicados no BeginPlay)
+	// Camera sobre o ombro (os valores finais sao aplicados no BeginPlay)
 	PrimaryActorTick.bCanEverTick = true;
 	CameraBoom->TargetArmLength = ShoulderArmLength;
 	CameraBoom->SocketOffset = ShoulderOffset;
@@ -74,9 +74,12 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APrototipoShooterCharacter::Look);
 
-		// Ações do shooter
+		// Acoes do shooter
 		SetupShooterInput();
 		EnhancedInputComponent->BindAction(ShoulderSwapAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoSwapShoulder);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoAimStart);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoAimEnd);
+		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoAimEnd);
 	}
 	else
 	{
@@ -146,10 +149,16 @@ void APrototipoShooterCharacter::DoJumpEnd()
 
 void APrototipoShooterCharacter::SetupShooterInput()
 {
-	// cria a ação de troca de ombro se ela não foi definida no Blueprint
+	// cria a acao de troca de ombro se ela nao foi definida no Blueprint
 	if (!ShoulderSwapAction)
 	{
 		ShoulderSwapAction = NewObject<UInputAction>(this, TEXT("IA_TrocarOmbro"));
+	}
+
+	// cria a acao de mira se ela nao foi definida no Blueprint
+	if (!AimAction)
+	{
+		AimAction = NewObject<UInputAction>(this, TEXT("IA_Mirar"));
 	}
 
 	// cria o mapping context com as teclas do shooter
@@ -158,6 +167,8 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shooter"));
 		ShooterMappingContext->MapKey(ShoulderSwapAction, EKeys::Q);
 		ShooterMappingContext->MapKey(ShoulderSwapAction, EKeys::Gamepad_RightThumbstick);
+		ShooterMappingContext->MapKey(AimAction, EKeys::RightMouseButton);
+		ShooterMappingContext->MapKey(AimAction, EKeys::Gamepad_LeftTrigger);
 	}
 
 	// registra o mapping context no jogador local
@@ -179,6 +190,11 @@ void APrototipoShooterCharacter::BeginPlay()
 
 	CurrentShoulderSide = bRightShoulder ? 1.f : -1.f;
 
+	// guarda os valores originais para restaurar ao sair da mira
+	DefaultFOV = FollowCamera->FieldOfView;
+	DefaultWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	DefaultRotationRate = GetCharacterMovement()->RotationRate;
+
 	CameraBoom->bEnableCameraLag = CameraLagSpeed > 0.f;
 	CameraBoom->CameraLagSpeed = CameraLagSpeed;
 
@@ -189,20 +205,52 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	// desliza a câmera suavemente para o ombro escolhido
+	// desliza a camera suavemente para o ombro escolhido
 	const float TargetSide = bRightShoulder ? 1.f : -1.f;
 	if (!FMath::IsNearlyEqual(CurrentShoulderSide, TargetSide, 0.001f))
 	{
 		CurrentShoulderSide = FMath::FInterpTo(CurrentShoulderSide, TargetSide, DeltaSeconds, ShoulderSwapSpeed);
 	}
 
+	// aproxima/afasta a camera ao entrar/sair da mira
+	AimAlpha = FMath::FInterpTo(AimAlpha, bIsAiming ? 1.f : 0.f, DeltaSeconds, AimInterpSpeed);
+
 	ApplyShoulderCamera();
 }
 
 void APrototipoShooterCharacter::ApplyShoulderCamera()
 {
-	CameraBoom->TargetArmLength = ShoulderArmLength;
-	CameraBoom->SocketOffset = FVector(ShoulderOffset.X, ShoulderOffset.Y * CurrentShoulderSide, ShoulderOffset.Z);
+	// mistura a camera normal com a camera de mira conforme o AimAlpha
+	const float ArmLength = FMath::Lerp(ShoulderArmLength, AimArmLength, AimAlpha);
+	const FVector Offset = FMath::Lerp(ShoulderOffset, AimOffset, AimAlpha);
+
+	CameraBoom->TargetArmLength = ArmLength;
+	CameraBoom->SocketOffset = FVector(Offset.X, Offset.Y * CurrentShoulderSide, Offset.Z);
+	FollowCamera->SetFieldOfView(FMath::Lerp(DefaultFOV, AimFOV, AimAlpha));
+}
+
+void APrototipoShooterCharacter::DoAimStart()
+{
+	bIsAiming = true;
+
+	// o personagem passa a encarar a direcao da camera, em vez da direcao do movimento
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = false;
+	Movement->bUseControllerDesiredRotation = true;
+	Movement->RotationRate = FRotator(0.f, AimRotationRate, 0.f);
+	Movement->MaxWalkSpeed = AimWalkSpeed;
+}
+
+void APrototipoShooterCharacter::DoAimEnd()
+{
+	bIsAiming = false;
+
+	// volta ao movimento livre
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->bOrientRotationToMovement = true;
+	Movement->bUseControllerDesiredRotation = false;
+	Movement->RotationRate = DefaultRotationRate;
+	Movement->MaxWalkSpeed = DefaultWalkSpeed;
 }
 
 void APrototipoShooterCharacter::DoSwapShoulder()
