@@ -15,6 +15,7 @@
 #include "InputCoreTypes.h"
 #include "ShooterWeapon.h"
 #include "ShooterInteractable.h"
+#include "ShooterCover.h"
 #include "ShooterDamageTypes.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimInstance.h"
@@ -74,6 +75,18 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 	if (MeleeAnim.Succeeded())
 	{
 		MeleeAnimation = MeleeAnim.Object;
+	}
+
+	// agachar (para a cobertura)
+	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
+	GetCharacterMovement()->SetCrouchedHalfHeight(CrouchedCapsuleHalfHeight);
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CoverCrouchSpeed;
+
+	// pose agachada provisoria (quadro da animacao de aterrissagem)
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> LandAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Jump/MM_Land.MM_Land"));
+	if (LandAnim.Succeeded())
+	{
+		CoverPoseAnimation = LandAnim.Object;
 	}
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
@@ -267,6 +280,10 @@ void APrototipoShooterCharacter::BeginPlay()
 	// guarda a animacao normal para restaurar depois do golpe
 	DefaultAnimClass = GetMesh()->GetAnimClass();
 
+	// valores de agachar (aplicados de novo caso tenham sido ajustados no codigo)
+	GetCharacterMovement()->SetCrouchedHalfHeight(CrouchedCapsuleHalfHeight);
+	GetCharacterMovement()->MaxWalkSpeedCrouched = CoverCrouchSpeed;
+
 	// cria a arma
 	if (!WeaponClass)
 	{
@@ -299,6 +316,9 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 
 	// aproxima/afasta a camera ao entrar/sair da mira
 	AimAlpha = FMath::FInterpTo(AimAlpha, bIsAiming ? 1.f : 0.f, DeltaSeconds, AimInterpSpeed);
+
+	// agacha atras da cobertura / levanta para mirar
+	UpdateCover();
 
 	// levanta/abaixa a arma
 	UpdateCombatStance();
@@ -640,13 +660,74 @@ void APrototipoShooterCharacter::EndMelee()
 {
 	bIsMeleeing = false;
 
-	// volta para a animacao normal (andar, correr, pular)
+	// volta para a animacao normal (se ainda estiver em cobertura, a pose agachada volta no proximo quadro)
 	if (MeleeAnimation)
 	{
-		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-		if (DefaultAnimClass)
+		RestoreDefaultAnimation();
+	}
+}
+
+void APrototipoShooterCharacter::RestoreDefaultAnimation()
+{
+	GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	if (DefaultAnimClass)
+	{
+		GetMesh()->SetAnimInstanceClass(DefaultAnimClass);
+	}
+}
+
+void APrototipoShooterCharacter::EnterCover(AShooterCover* Cover)
+{
+	CurrentCover = Cover;
+}
+
+void APrototipoShooterCharacter::LeaveCover(AShooterCover* Cover)
+{
+	// so sai se for a mesma cobertura (evita apagar outra que o jogador acabou de alcancar)
+	if (CurrentCover.Get() == Cover)
+	{
+		CurrentCover = nullptr;
+	}
+}
+
+bool APrototipoShooterCharacter::IsInCover() const
+{
+	return CurrentCover.IsValid();
+}
+
+void APrototipoShooterCharacter::UpdateCover()
+{
+	// agachado: perto da cobertura, sem mirar e sem dar golpe
+	// (atirar sem mirar continua agachado; mirar levanta)
+	const bool bWantsCrouch = CurrentCover.IsValid() && !bIsAiming && !bIsMeleeing;
+
+	if (bWantsCrouch && !bIsCrouched)
+	{
+		Crouch();
+	}
+	else if (!bWantsCrouch && bIsCrouched)
+	{
+		UnCrouch();
+	}
+
+	// pose agachada provisoria enquanto a capsula estiver agachada
+	const bool bWantsCoverPose = bIsCrouched && !bIsMeleeing && CoverPoseAnimation;
+
+	if (bWantsCoverPose && !bCoverPoseActive)
+	{
+		GetMesh()->PlayAnimation(CoverPoseAnimation, false);
+		GetMesh()->SetPosition(FMath::Min(CoverPoseTime, CoverPoseAnimation->GetPlayLength()), false);
+		GetMesh()->SetPlayRate(0.f);
+		bCoverPoseActive = true;
+	}
+	else if (!bWantsCoverPose && bCoverPoseActive)
+	{
+		bCoverPoseActive = false;
+
+		// durante o golpe a animacao do soco ja esta tocando: nao interrompe
+		if (!bIsMeleeing)
 		{
-			GetMesh()->SetAnimInstanceClass(DefaultAnimClass);
+			RestoreDefaultAnimation();
 		}
 	}
 }

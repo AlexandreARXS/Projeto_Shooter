@@ -128,6 +128,12 @@ void AShooterHUD::DrawInteraction(const APrototipoShooterCharacter* ShooterChara
 		DrawCenteredText(Message, Canvas->ClipY * 0.3f, FLinearColor::White, 1.6f);
 	}
 
+	// indicador de cobertura
+	if (ShooterCharacter->IsInCover())
+	{
+		DrawCenteredText(ShooterCharacter->IsAiming() ? TEXT("COBERTURA - MIRANDO") : TEXT("EM COBERTURA"), Canvas->ClipY * 0.9f, FLinearColor(0.7f, 0.7f, 0.7f, 0.9f), 0.9f);
+	}
+
 	// aviso de interacao quando ha um objeto ao alcance
 	if (const AShooterInteractable* Interactable = ShooterCharacter->GetFocusedInteractable())
 	{

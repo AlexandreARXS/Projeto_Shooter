@@ -5,6 +5,7 @@
 #include "ShooterTarget.h"
 #include "ShooterInteractable.h"
 #include "ShooterEnemy.h"
+#include "ShooterCover.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
@@ -110,4 +111,13 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 	FActorSpawnParameters EnemyParams;
 	EnemyParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	World->SpawnActor<AShooterEnemy>(AShooterEnemy::StaticClass(), EnemyLocation, EnemyFacing, EnemyParams);
+
+	// cobertura baixa logo atras do alvo Norte, de frente para o centro
+	FVector CoverLocation = Center + FVector(1.f, 0.f, 0.f) * (TargetDistance + CoverBehindDistance);
+	CoverLocation.Z = FindGroundZ(World, CoverLocation, Center);
+	const FRotator CoverFacing(0.f, (Center - CoverLocation).Rotation().Yaw, 0.f);
+
+	FActorSpawnParameters CoverParams;
+	CoverParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	World->SpawnActor<AShooterCover>(AShooterCover::StaticClass(), CoverLocation, CoverFacing, CoverParams);
 }

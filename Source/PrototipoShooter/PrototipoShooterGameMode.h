@@ -37,6 +37,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Teste")
 	FVector EnemyOffset = FVector(700.f, 450.f, 0.f);
 
+	/** Distancia da cobertura atras do alvo Norte */
+	UPROPERTY(EditAnywhere, Category="Teste")
+	float CoverBehindDistance = 300.f;
+
 	virtual void BeginPlay() override;
 
 	/** Coloca um alvo ao Norte, Sul, Leste e Oeste do ponto de inicio, e a caixa de interacao */

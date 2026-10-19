@@ -13,6 +13,7 @@ class UInputAction;
 class UInputMappingContext;
 class AShooterWeapon;
 class AShooterInteractable;
+class AShooterCover;
 class UAnimSequence;
 class UAnimInstance;
 struct FInputActionValue;
@@ -259,6 +260,38 @@ protected:
 	/** Fim do golpe: volta a animacao e o movimento */
 	void EndMelee();
 
+	// ---------- Cobertura ----------
+
+	/** Meia altura da capsula agachado (em pe = 96) */
+	UPROPERTY(EditAnywhere, Category="Cobertura")
+	float CrouchedCapsuleHalfHeight = 60.f;
+
+	/** Velocidade andando agachado atras da cobertura */
+	UPROPERTY(EditAnywhere, Category="Cobertura")
+	float CoverCrouchSpeed = 200.f;
+
+	/**
+	 * Pose agachada PROVISORIA: o template nao tem animacao de agachar,
+	 * entao usamos um quadro com os joelhos dobrados da animacao de aterrissagem
+	 */
+	UPROPERTY(EditAnywhere, Category="Cobertura")
+	TObjectPtr<UAnimSequence> CoverPoseAnimation;
+
+	/** Em que momento (segundos) da animacao esta a pose agachada */
+	UPROPERTY(EditAnywhere, Category="Cobertura")
+	float CoverPoseTime = 0.15f;
+
+	/** Cobertura em que o jogador esta (ou nenhuma) */
+	TWeakObjectPtr<AShooterCover> CurrentCover;
+
+	bool bCoverPoseActive = false;
+
+	/** Agacha/levanta conforme a cobertura e a mira */
+	void UpdateCover();
+
+	/** Volta para a animacao normal (Animation Blueprint) */
+	void RestoreDefaultAnimation();
+
 	/** Pontuacao total do jogador */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Pontos")
 	int32 Score = 0;
@@ -379,6 +412,13 @@ public:
 	/** Quanto a arma esta levantada (0 a 1), usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetCombatAlpha() const { return CombatAlpha; }
+
+	/** Chamado pela cobertura quando o jogador entra/sai da area dela */
+	void EnterCover(AShooterCover* Cover);
+	void LeaveCover(AShooterCover* Cover);
+
+	/** Esta em uma area de cobertura? usado pela HUD */
+	bool IsInCover() const;
 
 	/** Golpe corpo-a-corpo */
 	UFUNCTION(BlueprintCallable, Category="Corpo-a-corpo")
