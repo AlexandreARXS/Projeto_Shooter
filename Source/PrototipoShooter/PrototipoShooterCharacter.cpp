@@ -14,6 +14,7 @@
 #include "InputMappingContext.h"
 #include "InputCoreTypes.h"
 #include "ShooterWeapon.h"
+#include "ShooterInteractable.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
 #include "DrawDebugHelpers.h"
@@ -92,6 +93,7 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoFireStart);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoFireEnd);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoInteract);
 	}
 	else
 	{
@@ -179,6 +181,12 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		FireAction = NewObject<UInputAction>(this, TEXT("IA_Atirar"));
 	}
 
+	// cria a acao de interacao se ela nao foi definida no Blueprint
+	if (!InteractAction)
+	{
+		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interagir"));
+	}
+
 	// cria o mapping context com as teclas do shooter
 	if (!ShooterMappingContext)
 	{
@@ -189,6 +197,8 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext->MapKey(AimAction, EKeys::Gamepad_LeftTrigger);
 		ShooterMappingContext->MapKey(FireAction, EKeys::LeftMouseButton);
 		ShooterMappingContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
+		ShooterMappingContext->MapKey(InteractAction, EKeys::E);
+		ShooterMappingContext->MapKey(InteractAction, EKeys::Gamepad_FaceButton_Left);
 	}
 
 	// registra o mapping context no jogador local
@@ -427,4 +437,48 @@ void APrototipoShooterCharacter::DoAimEnd()
 void APrototipoShooterCharacter::DoSwapShoulder()
 {
 	bRightShoulder = !bRightShoulder;
+}
+
+void APrototipoShooterCharacter::DoInteract()
+{
+	if (AShooterInteractable* Interactable = FocusedInteractable.Get())
+	{
+		Interactable->Interact(this);
+	}
+}
+
+void APrototipoShooterCharacter::SetFocusedInteractable(AShooterInteractable* Interactable)
+{
+	FocusedInteractable = Interactable;
+}
+
+void APrototipoShooterCharacter::ClearFocusedInteractable(AShooterInteractable* Interactable)
+{
+	// so limpa se for o mesmo objeto (evita apagar outro que o jogador acabou de alcancar)
+	if (FocusedInteractable.Get() == Interactable)
+	{
+		FocusedInteractable = nullptr;
+	}
+}
+
+AShooterInteractable* APrototipoShooterCharacter::GetFocusedInteractable() const
+{
+	return FocusedInteractable.Get();
+}
+
+void APrototipoShooterCharacter::ShowScreenMessage(const FString& Message, float Duration)
+{
+	ScreenMessage = Message;
+	ScreenMessageEndTime = GetWorld()->GetTimeSeconds() + Duration;
+}
+
+bool APrototipoShooterCharacter::GetActiveScreenMessage(FString& OutMessage) const
+{
+	if (ScreenMessage.IsEmpty() || GetWorld()->GetTimeSeconds() > ScreenMessageEndTime)
+	{
+		return false;
+	}
+
+	OutMessage = ScreenMessage;
+	return true;
 }

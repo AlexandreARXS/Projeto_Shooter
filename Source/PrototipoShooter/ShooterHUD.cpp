@@ -1,8 +1,11 @@
-// HUD do shooter: desenha a mira no centro da tela
+// HUD do shooter: mira, marcador de acerto, aviso de interacao e mensagens
 
 #include "ShooterHUD.h"
 #include "Engine/Canvas.h"
+#include "Engine/Engine.h"
+#include "Engine/Font.h"
 #include "PrototipoShooterCharacter.h"
+#include "ShooterInteractable.h"
 
 void AShooterHUD::DrawHUD()
 {
@@ -13,13 +16,50 @@ void AShooterHUD::DrawHUD()
 		return;
 	}
 
-	// so mostra a mira enquanto o personagem esta mirando
 	const APrototipoShooterCharacter* ShooterCharacter = Cast<APrototipoShooterCharacter>(GetOwningPawn());
 	if (!ShooterCharacter)
 	{
 		return;
 	}
 
+	DrawInteraction(ShooterCharacter);
+	DrawCrosshair(ShooterCharacter);
+}
+
+void AShooterHUD::DrawCenteredText(const FString& Text, float CenterY, const FLinearColor& Color, float Scale)
+{
+	UFont* Font = GEngine ? GEngine->GetLargeFont() : nullptr;
+
+	float Width = 0.f;
+	float Height = 0.f;
+	GetTextSize(Text, Width, Height, Font, Scale);
+
+	const float X = (Canvas->ClipX - Width) * 0.5f;
+	const float Y = CenterY - Height * 0.5f;
+
+	// sombra para ler em qualquer fundo
+	DrawText(Text, FLinearColor(0.f, 0.f, 0.f, 0.8f), X + 2.f, Y + 2.f, Font, Scale);
+	DrawText(Text, Color, X, Y, Font, Scale);
+}
+
+void AShooterHUD::DrawInteraction(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	// mensagem ativa (ex.: depois de interagir)
+	FString Message;
+	if (ShooterCharacter->GetActiveScreenMessage(Message))
+	{
+		DrawCenteredText(Message, Canvas->ClipY * 0.3f, FLinearColor::White, 1.6f);
+	}
+
+	// aviso de interacao quando ha um objeto ao alcance
+	if (const AShooterInteractable* Interactable = ShooterCharacter->GetFocusedInteractable())
+	{
+		DrawCenteredText(Interactable->Prompt, Canvas->ClipY * 0.68f, FLinearColor(0.6f, 0.9f, 1.f, 1.f), 1.f);
+	}
+}
+
+void AShooterHUD::DrawCrosshair(const APrototipoShooterCharacter* ShooterCharacter)
+{
 	// a mira aparece quando a arma esta levantada (mirando ou atirando)
 	const float Alpha = ShooterCharacter->GetCombatAlpha();
 	if (Alpha <= 0.05f)

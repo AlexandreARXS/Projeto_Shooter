@@ -1,10 +1,12 @@
-// HUD do shooter: desenha a mira no centro da tela
+// HUD do shooter: mira, marcador de acerto, aviso de interacao e mensagens
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "ShooterHUD.generated.h"
+
+class APrototipoShooterCharacter;
 
 UCLASS()
 class AShooterHUD : public AHUD
@@ -40,4 +42,10 @@ protected:
 public:
 
 	virtual void DrawHUD() override;
+
+private:
+
+	void DrawCrosshair(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawInteraction(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawCenteredText(const FString& Text, float CenterY, const FLinearColor& Color, float Scale);
 };

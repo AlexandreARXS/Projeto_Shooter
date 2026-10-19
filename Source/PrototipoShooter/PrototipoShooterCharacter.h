@@ -12,6 +12,7 @@ class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class AShooterWeapon;
+class AShooterInteractable;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -62,6 +63,10 @@ protected:
 	/** Atirar (segurar = automatico). Se ficar vazio, e criado em codigo (botao esquerdo do mouse / gatilho direito) */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> FireAction;
+
+	/** Interagir. Se ficar vazio, e criado em codigo (tecla E / botao X do controle) */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> InteractAction;
 
 	/** Mapping context do shooter, criado em codigo */
 	UPROPERTY(Transient)
@@ -187,6 +192,15 @@ protected:
 	float LastHitConfirmTime = -100.f;
 	FTimerHandle FireTimer;
 
+	// ---------- Interacao ----------
+
+	/** Objeto interativo ao alcance do jogador */
+	TWeakObjectPtr<AShooterInteractable> FocusedInteractable;
+
+	/** Mensagem atual na tela e ate quando ela fica visivel */
+	FString ScreenMessage;
+	float ScreenMessageEndTime = -1.f;
+
 	/** Valores originais, guardados no BeginPlay para restaurar ao sair da mira */
 	float DefaultFOV = 90.f;
 	float DefaultWalkSpeed = 500.f;
@@ -279,6 +293,23 @@ public:
 	/** Quanto a arma esta levantada (0 a 1), usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetCombatAlpha() const { return CombatAlpha; }
+
+	/** Interage com o objeto ao alcance */
+	UFUNCTION(BlueprintCallable, Category="Interacao")
+	virtual void DoInteract();
+
+	/** Chamado pelo objeto interativo quando o jogador entra/sai da area dele */
+	void SetFocusedInteractable(AShooterInteractable* Interactable);
+	void ClearFocusedInteractable(AShooterInteractable* Interactable);
+
+	/** Objeto interativo ao alcance (ou nullptr), usado pela HUD */
+	AShooterInteractable* GetFocusedInteractable() const;
+
+	/** Mostra uma mensagem no centro da tela por alguns segundos */
+	void ShowScreenMessage(const FString& Message, float Duration);
+
+	/** Retorna true e a mensagem se houver uma mensagem ativa, usado pela HUD */
+	bool GetActiveScreenMessage(FString& OutMessage) const;
 
 	/** Momento do ultimo acerto confirmado, usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Tiro")

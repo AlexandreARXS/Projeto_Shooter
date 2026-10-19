@@ -29,9 +29,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Teste")
 	float TargetDistance = 1200.f;
 
+	/** Distancia da caixa de interacao atras do alvo Oeste */
+	UPROPERTY(EditAnywhere, Category="Teste")
+	float InteractableBehindDistance = 250.f;
+
 	virtual void BeginPlay() override;
 
-	/** Coloca um alvo ao Norte, Sul, Leste e Oeste do ponto de inicio */
+	/** Coloca um alvo ao Norte, Sul, Leste e Oeste do ponto de inicio, e a caixa de interacao */
 	void SpawnTestTargets();
 };
 

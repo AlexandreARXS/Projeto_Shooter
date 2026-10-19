@@ -3,6 +3,7 @@
 #include "PrototipoShooterGameMode.h"
 #include "ShooterHUD.h"
 #include "ShooterTarget.h"
+#include "ShooterInteractable.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
@@ -11,6 +12,22 @@ APrototipoShooterGameMode::APrototipoShooterGameMode()
 {
 	// HUD com a mira na tela
 	HUDClass = AShooterHUD::StaticClass();
+}
+
+namespace
+{
+	/** Altura do chao embaixo de um ponto (ou um pouco abaixo do centro, se nao achar chao) */
+	float FindGroundZ(UWorld* World, const FVector& Location, const FVector& Center)
+	{
+		FHitResult Ground;
+		const FVector TraceStart(Location.X, Location.Y, Center.Z + 300.f);
+		const FVector TraceEnd(Location.X, Location.Y, Center.Z - 3000.f);
+		if (World->LineTraceSingleByChannel(Ground, TraceStart, TraceEnd, ECC_Visibility))
+		{
+			return Ground.ImpactPoint.Z;
+		}
+		return Center.Z - 90.f;
+	}
 }
 
 void APrototipoShooterGameMode::BeginPlay()
@@ -57,19 +74,7 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 	for (const FTargetSpot& Spot : Spots)
 	{
 		FVector Location = Center + Spot.Direction * TargetDistance;
-
-		// procura o chao embaixo do ponto
-		FHitResult Ground;
-		const FVector TraceStart(Location.X, Location.Y, Center.Z + 300.f);
-		const FVector TraceEnd(Location.X, Location.Y, Center.Z - 3000.f);
-		if (World->LineTraceSingleByChannel(Ground, TraceStart, TraceEnd, ECC_Visibility))
-		{
-			Location.Z = Ground.ImpactPoint.Z;
-		}
-		else
-		{
-			Location.Z = Center.Z - 90.f;
-		}
+		Location.Z = FindGroundZ(World, Location, Center);
 
 		// o alvo fica de frente para o centro
 		const FRotator Facing(0.f, (-Spot.Direction).Rotation().Yaw, 0.f);
@@ -81,5 +86,18 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 		{
 			Target->TargetName = Spot.Name;
 		}
+	}
+
+	// ponto de interacao logo atras do alvo Oeste
+	FVector BoxLocation = Center + FVector(0.f, -1.f, 0.f) * (TargetDistance + InteractableBehindDistance);
+	BoxLocation.Z = FindGroundZ(World, BoxLocation, Center);
+
+	FActorSpawnParameters BoxParams;
+	BoxParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	if (AShooterInteractable* Box = World->SpawnActor<AShooterInteractable>(AShooterInteractable::StaticClass(), BoxLocation, FRotator::ZeroRotator, BoxParams))
+	{
+		// "Voce saira daqui", com acentos
+		Box->Message = FString(TEXT("Voc\u00EA sair\u00E1 daqui"));
 	}
 }
