@@ -6,6 +6,8 @@
 #include "Engine/Font.h"
 #include "PrototipoShooterCharacter.h"
 #include "ShooterInteractable.h"
+#include "ShooterEnemy.h"
+#include "EngineUtils.h"
 
 void AShooterHUD::DrawHUD()
 {
@@ -22,6 +24,7 @@ void AShooterHUD::DrawHUD()
 		return;
 	}
 
+	DrawEnemyHealthBars();
 	DrawInteraction(ShooterCharacter);
 	DrawCrosshair(ShooterCharacter);
 	DrawScore(ShooterCharacter);
@@ -157,18 +160,63 @@ void AShooterHUD::DrawCrosshair(const APrototipoShooterCharacter* ShooterCharact
 	DrawLine(CenterX, CenterY + Gap, CenterX, CenterY + Gap + Len, Color, CrosshairThickness);
 	DrawRect(Color, CenterX - 1.f, CenterY - 1.f, 2.f, 2.f);
 
-	// marcador de acerto: um X vermelho rapido em volta da mira
-	const float SinceHit = GetWorld()->GetTimeSeconds() - ShooterCharacter->GetLastHitConfirmTime();
-	if (SinceHit >= 0.f && SinceHit < HitMarkerDuration)
+	// marcador de acerto: X em volta da mira (vermelho = corpo, amarelo = cabeca, maior = abate)
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float SinceHit = Now - ShooterCharacter->GetLastHitConfirmTime();
+	const bool bRecentKill = (Now - ShooterCharacter->GetLastKillTime()) < 0.5f;
+	if (SinceHit >= 0.f && (SinceHit < HitMarkerDuration || bRecentKill))
 	{
-		FLinearColor HitColor = HitMarkerColor;
-		HitColor.A *= 1.f - (SinceHit / HitMarkerDuration);
+		FLinearColor HitColor = ShooterCharacter->WasLastHitHeadshot() ? FLinearColor(1.f, 0.85f, 0.1f, 1.f) : HitMarkerColor;
+		HitColor.A *= bRecentKill ? 1.f : 1.f - (SinceHit / HitMarkerDuration);
 
-		const float In = 8.f;
-		const float Out = 16.f;
+		const float In = bRecentKill ? 10.f : 8.f;
+		const float Out = bRecentKill ? 24.f : 16.f;
 		DrawLine(CenterX - Out, CenterY - Out, CenterX - In, CenterY - In, HitColor, 2.5f);
 		DrawLine(CenterX + In, CenterY - In, CenterX + Out, CenterY - Out, HitColor, 2.5f);
 		DrawLine(CenterX - Out, CenterY + Out, CenterX - In, CenterY + In, HitColor, 2.5f);
 		DrawLine(CenterX + In, CenterY + In, CenterX + Out, CenterY + Out, HitColor, 2.5f);
+	}
+}
+
+void AShooterHUD::DrawEnemyHealthBars()
+{
+	if (!PlayerOwner)
+	{
+		return;
+	}
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	PlayerOwner->GetPlayerViewPoint(CameraLocation, CameraRotation);
+	const FVector CameraForward = CameraRotation.Vector();
+
+	for (TActorIterator<AShooterEnemy> It(GetWorld()); It; ++It)
+	{
+		const AShooterEnemy* Enemy = *It;
+		if (!Enemy || Enemy->IsDead())
+		{
+			continue;
+		}
+
+		// so desenha se estiver na frente da camera e nao muito longe
+		const FVector WorldLocation = Enemy->GetHealthBarLocation();
+		const FVector ToEnemy = WorldLocation - CameraLocation;
+		if (FVector::DotProduct(ToEnemy, CameraForward) <= 0.f || ToEnemy.Size() > 4000.f)
+		{
+			continue;
+		}
+
+		const FVector Screen = Project(WorldLocation);
+		const float Percent = FMath::Clamp(Enemy->GetHealth() / Enemy->GetMaxHealth(), 0.f, 1.f);
+
+		const float Width = 80.f;
+		const float Height = 7.f;
+		const float X = Screen.X - Width * 0.5f;
+		const float Y = Screen.Y;
+
+		// fundo escuro + vida (verde -> vermelho)
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), X - 1.f, Y - 1.f, Width + 2.f, Height + 2.f);
+		const FLinearColor BarColor = FLinearColor::LerpUsingHSV(FLinearColor(1.f, 0.1f, 0.1f), FLinearColor(0.2f, 1.f, 0.2f), Percent);
+		DrawRect(BarColor, X, Y, Width * Percent, Height);
 	}
 }

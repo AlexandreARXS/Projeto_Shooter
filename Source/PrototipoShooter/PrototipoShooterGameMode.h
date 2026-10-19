@@ -33,6 +33,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Teste")
 	float InteractableBehindDistance = 250.f;
 
+	/** Posicao do inimigo em relacao ao ponto de inicio (X = Norte, Y = Leste) */
+	UPROPERTY(EditAnywhere, Category="Teste")
+	FVector EnemyOffset = FVector(700.f, 450.f, 0.f);
+
 	virtual void BeginPlay() override;
 
 	/** Coloca um alvo ao Norte, Sul, Leste e Oeste do ponto de inicio, e a caixa de interacao */

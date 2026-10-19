@@ -4,6 +4,7 @@
 #include "ShooterHUD.h"
 #include "ShooterTarget.h"
 #include "ShooterInteractable.h"
+#include "ShooterEnemy.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
@@ -100,4 +101,13 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 		// "Voce saira daqui", com acentos
 		Box->Message = FString(TEXT("Voc\u00EA sair\u00E1 daqui"));
 	}
+
+	// primeiro inimigo: entre o centro e os alvos Norte e Leste, virado para o jogador
+	FVector EnemyLocation = Center + EnemyOffset;
+	EnemyLocation.Z = FindGroundZ(World, EnemyLocation, Center) + 98.f;
+	const FRotator EnemyFacing(0.f, (Center - EnemyLocation).Rotation().Yaw, 0.f);
+
+	FActorSpawnParameters EnemyParams;
+	EnemyParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	World->SpawnActor<AShooterEnemy>(AShooterEnemy::StaticClass(), EnemyLocation, EnemyFacing, EnemyParams);
 }

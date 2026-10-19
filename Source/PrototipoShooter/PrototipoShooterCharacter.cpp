@@ -436,10 +436,16 @@ void APrototipoShooterCharacter::FireShot()
 		// aplica dano em quem foi atingido
 		if (AActor* HitActor = Hit.GetActor())
 		{
+			bLastHitWasHeadshot = false;
+
 			const float Applied = UGameplayStatics::ApplyPointDamage(HitActor, ShotDamage, ShotDirection, Hit, GetController(), this, UDamageType::StaticClass());
 			if (Applied > 0.f)
 			{
 				LastHitConfirmTime = LastShotTime;
+			}
+			else
+			{
+				bLastHitWasHeadshot = false;
 			}
 		}
 	}
@@ -493,6 +499,17 @@ float APrototipoShooterCharacter::GetReloadProgress() const
 void APrototipoShooterCharacter::AddScore(int32 Points)
 {
 	Score += Points;
+}
+
+void APrototipoShooterCharacter::NotifyEnemyHit(bool bHeadshot, bool bKilled)
+{
+	bLastHitWasHeadshot = bHeadshot;
+
+	if (bKilled)
+	{
+		LastKillTime = GetWorld()->GetTimeSeconds();
+		ShowScreenMessage(bHeadshot ? TEXT("ABATIDO NA CABECA!") : TEXT("INIMIGO ABATIDO"), 1.5f);
+	}
 }
 
 void APrototipoShooterCharacter::ApplyShoulderCamera()

@@ -219,6 +219,8 @@ protected:
 
 	float LastShotTime = -100.f;
 	float LastHitConfirmTime = -100.f;
+	bool bLastHitWasHeadshot = false;
+	float LastKillTime = -100.f;
 	FTimerHandle FireTimer;
 
 	// ---------- Interacao ----------
@@ -340,8 +342,17 @@ public:
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetReloadProgress() const;
 
-	/** Soma pontos (chamado pelos alvos) */
+	/** Soma pontos (chamado pelos alvos e inimigos) */
 	void AddScore(int32 Points);
+
+	/** Chamado pelo inimigo atingido (muda o marcador de acerto e avisa o abate) */
+	void NotifyEnemyHit(bool bHeadshot, bool bKilled);
+
+	/** O ultimo acerto foi na cabeca? usado pela HUD */
+	bool WasLastHitHeadshot() const { return bLastHitWasHeadshot; }
+
+	/** Momento do ultimo abate, usado pela HUD */
+	float GetLastKillTime() const { return LastKillTime; }
 
 	UFUNCTION(BlueprintPure, Category="Pontos")
 	int32 GetScore() const { return Score; }
