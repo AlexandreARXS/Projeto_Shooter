@@ -1,4 +1,4 @@
-// Primeiro inimigo: boneco parado que leva dano no corpo e na cabeca, morre e reaparece
+// Primeiro inimigo: patrulha, leva dano no corpo e na cabeca, morre e reaparece
 
 #pragma once
 
@@ -10,7 +10,7 @@ class UCapsuleComponent;
 class USphereComponent;
 class UAnimSequence;
 
-// PROVISORIO: Inimigo, sem IA (fica parado). Adicionar AIController + comportamento (andar, cobertura, atirar).
+// PROVISORIO: Inimigo, IA simples (patrulha em linha reta, sem NavMesh). Trocar por StateTree/Behavior Tree + NavMesh (perseguir, cobertura, atirar).
 UCLASS()
 class AShooterEnemy : public ACharacter
 {
@@ -29,6 +29,7 @@ public:
 	AShooterEnemy();
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -74,6 +75,64 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Inimigo")
 	float Health = 100.f;
+
+	// ---------- Patrulha ----------
+
+	/** Distancia da patrulha, para a direita de onde o inimigo nasce */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float PatrolDistance = 600.f;
+
+	/** Velocidade andando na patrulha */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float PatrolSpeed = 160.f;
+
+	/** Tempo parado em cada ponta da patrulha */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float PatrolWaitTime = 1.5f;
+
+	/** Tempo parado depois de levar um tiro */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float HitPauseTime = 0.6f;
+
+	/** Distancia a frente em que o inimigo procura obstaculos */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float ObstacleProbeDistance = 80.f;
+
+	/** Tempo parado antes de voltar quando encontra um obstaculo */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float ObstacleWaitTime = 0.5f;
+
+	/** A cada quantos segundos confere se o inimigo ficou travado */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float StuckCheckInterval = 0.4f;
+
+	/** Se andar menos que isso entre duas conferencias, considera travado */
+	UPROPERTY(EditAnywhere, Category="Patrulha")
+	float StuckMinDistance = 15.f;
+
+	FVector StuckCheckLocation = FVector::ZeroVector;
+	float StuckCheckTime = 0.f;
+
+	FVector PatrolStart = FVector::ZeroVector;
+	FVector PatrolEnd = FVector::ZeroVector;
+	FRotator SpawnRotation = FRotator::ZeroRotator;
+	bool bMovingToEnd = true;
+	float WaitUntil = 0.f;
+
+	/** Anda em direcao ao ponto atual da patrulha */
+	void UpdatePatrol();
+
+	/** Tem algo bloqueando o caminho logo a frente? */
+	bool IsPathBlocked(const FVector& Direction) const;
+
+	/** Andou quase nada desde a ultima conferencia? */
+	bool IsStuck(float Now);
+
+	/** Para e volta pelo caminho de onde veio */
+	void TurnAround(float Now, float WaitTime);
+
+	/** Reinicia a conferencia de travamento a partir da posicao atual */
+	void ResetStuckCheck(float Now);
 
 	bool bIsDead = false;
 

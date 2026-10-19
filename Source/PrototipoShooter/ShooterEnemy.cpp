@@ -1,4 +1,4 @@
-// Primeiro inimigo: boneco parado que leva dano no corpo e na cabeca, morre e reaparece
+// Primeiro inimigo: patrulha, leva dano no corpo e na cabeca, morre e reaparece
 
 #include "ShooterEnemy.h"
 #include "PrototipoShooterCharacter.h"
@@ -13,6 +13,7 @@
 #include "Engine/DamageEvents.h"
 #include "Engine/Engine.h"
 #include "TimerManager.h"
+#include "AIController.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -30,10 +31,17 @@ namespace
 
 AShooterEnemy::AShooterEnemy()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
-	// por enquanto nao tem IA: fica parado
-	AutoPossessAI = EAutoPossessAI::Disabled;
+	// um AIController simples "dirige" o personagem (necessario para o movimento funcionar)
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+	AIControllerClass = AAIController::StaticClass();
+
+	// vira na direcao em que anda
+	bUseControllerRotationYaw = false;
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 300.f, 0.f);
+	GetCharacterMovement()->MaxWalkSpeed = PatrolSpeed;
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> QuinnMesh(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple.SKM_Quinn_Simple"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> UnarmedAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed"));
@@ -83,6 +91,98 @@ void AShooterEnemy::BeginPlay()
 {
 	Super::BeginPlay();
 	Health = MaxHealth;
+
+	// patrulha: de onde nasceu ate PatrolDistance para a direita, ida e volta
+	PatrolStart = GetActorLocation();
+	PatrolEnd = PatrolStart + GetActorRightVector() * PatrolDistance;
+	SpawnRotation = GetActorRotation();
+	GetCharacterMovement()->MaxWalkSpeed = PatrolSpeed;
+
+	// espera um pouco antes de comecar a andar
+	WaitUntil = GetWorld()->GetTimeSeconds() + PatrolWaitTime;
+}
+
+void AShooterEnemy::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!bIsDead)
+	{
+		UpdatePatrol();
+	}
+}
+
+void AShooterEnemy::UpdatePatrol()
+{
+	// parado (na ponta da patrulha, depois de levar tiro ou diante de obstaculo)
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < WaitUntil)
+	{
+		ResetStuckCheck(Now);
+		return;
+	}
+
+	const FVector Target = bMovingToEnd ? PatrolEnd : PatrolStart;
+	FVector ToTarget = Target - GetActorLocation();
+	ToTarget.Z = 0.f;
+
+	// chegou: inverte o sentido e espera
+	if (ToTarget.Size() < 40.f)
+	{
+		TurnAround(Now, PatrolWaitTime);
+		return;
+	}
+
+	const FVector Direction = ToTarget.GetSafeNormal();
+
+	// obstaculo a frente ou travado: volta pelo caminho de onde veio
+	if (IsPathBlocked(Direction) || IsStuck(Now))
+	{
+		TurnAround(Now, ObstacleWaitTime);
+		return;
+	}
+
+	AddMovementInput(Direction, 1.f);
+}
+
+bool AShooterEnemy::IsPathBlocked(const FVector& Direction) const
+{
+	// varre uma capsula um pouco menor que o inimigo, levemente acima do chao (para nao detectar o piso)
+	const FVector Start = GetActorLocation() + FVector(0.f, 0.f, 10.f);
+	const FVector End = Start + Direction * ObstacleProbeDistance;
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(30.f, 70.f);
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EnemyObstacleProbe), false, this);
+
+	// canal Pawn = tudo o que bloquearia um personagem andando (paredes, caixas, alvos, o jogador)
+	FHitResult Hit;
+	return GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Pawn, Shape, Params);
+}
+
+bool AShooterEnemy::IsStuck(float Now)
+{
+	if (Now - StuckCheckTime < StuckCheckInterval)
+	{
+		return false;
+	}
+
+	const float Moved = FVector::Dist2D(GetActorLocation(), StuckCheckLocation);
+	ResetStuckCheck(Now);
+	return Moved < StuckMinDistance;
+}
+
+void AShooterEnemy::TurnAround(float Now, float WaitTime)
+{
+	bMovingToEnd = !bMovingToEnd;
+	WaitUntil = Now + WaitTime;
+	GetCharacterMovement()->StopMovementImmediately();
+	ResetStuckCheck(Now);
+}
+
+void AShooterEnemy::ResetStuckCheck(float Now)
+{
+	StuckCheckTime = Now;
+	StuckCheckLocation = GetActorLocation();
 }
 
 void AShooterEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -143,6 +243,12 @@ float AShooterEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEv
 	{
 		Die();
 	}
+	else
+	{
+		// "sente" o tiro: para por um instante
+		GetCharacterMovement()->StopMovementImmediately();
+		WaitUntil = FMath::Max(WaitUntil, GetWorld()->GetTimeSeconds() + HitPauseTime);
+	}
 
 	return Damage;
 }
@@ -170,6 +276,11 @@ void AShooterEnemy::Respawn()
 {
 	bIsDead = false;
 	Health = MaxHealth;
+
+	// volta para o comeco da patrulha
+	SetActorLocationAndRotation(PatrolStart, SpawnRotation, false, nullptr, ETeleportType::TeleportPhysics);
+	bMovingToEnd = true;
+	WaitUntil = GetWorld()->GetTimeSeconds() + PatrolWaitTime;
 
 	SetHitboxesEnabled(true);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
