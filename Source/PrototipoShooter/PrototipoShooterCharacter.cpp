@@ -373,6 +373,9 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// vida volta aos poucos
+	UpdateHealthRegen(DeltaSeconds);
+
 	// desliza a camera suavemente para o ombro escolhido
 	const float TargetSide = bRightShoulder ? 1.f : -1.f;
 	if (!FMath::IsNearlyEqual(CurrentShoulderSide, TargetSide, 0.001f))
@@ -972,6 +975,22 @@ float APrototipoShooterCharacter::TakeDamage(float DamageAmount, FDamageEvent co
 	}
 
 	return Damage;
+}
+
+void APrototipoShooterCharacter::UpdateHealthRegen(float DeltaSeconds)
+{
+	if (Health >= MaxHealth || HealthRegenRate <= 0.f)
+	{
+		return;
+	}
+
+	// so recupera depois de um tempo sem levar dano
+	if (GetWorld()->GetTimeSeconds() - LastDamageTime < HealthRegenDelay)
+	{
+		return;
+	}
+
+	Health = FMath::Min(MaxHealth, Health + HealthRegenRate * DeltaSeconds);
 }
 
 void APrototipoShooterCharacter::Die()

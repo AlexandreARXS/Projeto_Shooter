@@ -323,6 +323,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Vida")
 	float HeadshotMultiplier = 2.5f;
 
+	/** Pontos de vida recuperados por segundo */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	float HealthRegenRate = 1.f;
+
+	/**
+	 * Segundos sem levar dano antes de comecar a recuperar.
+	 * Mantem a regra de 5 tiros no corpo / 2 na cabeca durante um combate
+	 * (sem esse tempo, a vida subiria entre as rajadas do inimigo)
+	 */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	float HealthRegenDelay = 3.f;
+
 	/** Segundos entre a morte e o reinicio do mapa */
 	UPROPERTY(EditAnywhere, Category="Vida")
 	float RestartDelay = 4.f;
@@ -338,6 +350,9 @@ protected:
 	/** Animacao de morte do jogador */
 	UPROPERTY(EditAnywhere, Category="Vida")
 	TObjectPtr<UAnimSequence> DeathAnimation;
+
+	/** Recupera a vida aos poucos depois de um tempo sem levar dano */
+	void UpdateHealthRegen(float DeltaSeconds);
 
 	/** Morre: para tudo, toca a animacao e agenda o reinicio */
 	void Die();
