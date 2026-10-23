@@ -6,6 +6,7 @@
 #include "ShooterInteractable.h"
 #include "ShooterEnemy.h"
 #include "ShooterCover.h"
+#include "ShooterCollectible.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
@@ -122,4 +123,12 @@ void APrototipoShooterGameMode::SpawnTestTargets()
 	FActorSpawnParameters CoverParams;
 	CoverParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	World->SpawnActor<AShooterCover>(AShooterCover::StaticClass(), CoverLocation, CoverFacing, CoverParams);
+
+	// colecionavel perto do ponto de inicio, entre o centro e os alvos Norte e Oeste
+	FVector CollectibleLocation = Center + CollectibleOffset;
+	CollectibleLocation.Z = FindGroundZ(World, CollectibleLocation, Center);
+
+	FActorSpawnParameters CollectibleParams;
+	CollectibleParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	World->SpawnActor<AShooterCollectible>(AShooterCollectible::StaticClass(), CollectibleLocation, FRotator::ZeroRotator, CollectibleParams);
 }

@@ -44,10 +44,7 @@ void AShooterInteractable::BeginPlay()
 
 void AShooterInteractable::SetHighlighted(bool bHighlighted)
 {
-	// azul petroleo normal, azul claro quando o jogador esta perto
-	const FVector Normal(0.02f, 0.25f, 0.35f);
-	const FVector Highlight(0.1f, 0.7f, 1.f);
-	Box->SetVectorParameterValueOnMaterials(TEXT("Color"), bHighlighted ? Highlight : Normal);
+	Box->SetVectorParameterValueOnMaterials(TEXT("Color"), bHighlighted ? HighlightColor : NormalColor);
 }
 
 void AShooterInteractable::OnAreaBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

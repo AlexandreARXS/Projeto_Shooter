@@ -319,6 +319,19 @@ protected:
 	/** Objeto interativo ao alcance do jogador */
 	TWeakObjectPtr<AShooterInteractable> FocusedInteractable;
 
+	/** Segurando o botao de interacao (objetos que exigem segurar) */
+	bool bHoldingInteract = false;
+	float InteractHoldStart = 0.f;
+
+	/** Avanca a interacao de segurar e conclui quando o tempo completa */
+	void UpdateInteractHold();
+
+	// ---------- Colecionaveis ----------
+
+	/** Nomes dos colecionaveis ja pegos */
+	TArray<FString> CollectedItems;
+	float LastCollectTime = -100.f;
+
 	/** Mensagem atual na tela e ate quando ela fica visivel */
 	FString ScreenMessage;
 	float ScreenMessageEndTime = -1.f;
@@ -462,9 +475,23 @@ public:
 	UFUNCTION(BlueprintPure, Category="Pontos")
 	int32 GetScore() const { return Score; }
 
-	/** Interage com o objeto ao alcance */
+	/** Interage com o objeto ao alcance (ou comeca a segurar) */
 	UFUNCTION(BlueprintCallable, Category="Interacao")
 	virtual void DoInteract();
+
+	/** Soltou o botao de interacao */
+	UFUNCTION(BlueprintCallable, Category="Interacao")
+	virtual void DoInteractRelease();
+
+	/** Progresso da interacao de segurar (0 a 1), usado pela HUD */
+	float GetInteractHoldProgress() const;
+
+	/** Registra um colecionavel pego (chamado pelo colecionavel) */
+	void AddCollectible(const FString& ItemName);
+
+	int32 GetCollectedCount() const { return CollectedItems.Num(); }
+	float GetLastCollectTime() const { return LastCollectTime; }
+	FString GetLastCollectedName() const { return CollectedItems.Num() > 0 ? CollectedItems.Last() : FString(); }
 
 	/** Chamado pelo objeto interativo quando o jogador entra/sai da area dele */
 	void SetFocusedInteractable(AShooterInteractable* Interactable);

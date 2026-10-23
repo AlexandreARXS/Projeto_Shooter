@@ -15,6 +15,8 @@ class AShooterInteractable : public AActor
 {
 	GENERATED_BODY()
 
+protected:
+
 	UPROPERTY(VisibleAnywhere, Category="Components")
 	TObjectPtr<USceneComponent> InteractableRoot;
 
@@ -42,10 +44,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interacao")
 	float MessageDuration = 3.f;
 
+	/** Segundos segurando o botao para interagir (0 = basta apertar) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Interacao")
+	float HoldDuration = 0.f;
+
+	/** Cor normal e cor de destaque (quando o jogador esta perto) */
+	UPROPERTY(EditAnywhere, Category="Interacao")
+	FVector NormalColor = FVector(0.02f, 0.25f, 0.35f);
+
+	UPROPERTY(EditAnywhere, Category="Interacao")
+	FVector HighlightColor = FVector(0.1f, 0.7f, 1.f);
+
 	virtual void BeginPlay() override;
 
-	/** Chamado pelo personagem ao apertar o botao de interacao */
-	void Interact(APrototipoShooterCharacter* Interactor);
+	/** Chamado pelo personagem ao apertar (ou terminar de segurar) o botao de interacao */
+	virtual void Interact(APrototipoShooterCharacter* Interactor);
 
 protected:
 
@@ -55,8 +68,6 @@ protected:
 	UFUNCTION()
 	void OnAreaEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-private:
-
-	/** Destaca a caixa quando o jogador esta perto */
+	/** Destaca o objeto quando o jogador esta perto */
 	void SetHighlighted(bool bHighlighted);
 };

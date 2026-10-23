@@ -41,6 +41,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Teste")
 	float CoverBehindDistance = 300.f;
 
+	/** Posicao do colecionavel em relacao ao ponto de inicio (X = Norte, Y = Leste) */
+	UPROPERTY(EditAnywhere, Category="Teste")
+	FVector CollectibleOffset = FVector(400.f, -350.f, 0.f);
+
 	virtual void BeginPlay() override;
 
 	/** Coloca um alvo ao Norte, Sul, Leste e Oeste do ponto de inicio, e a caixa de interacao */

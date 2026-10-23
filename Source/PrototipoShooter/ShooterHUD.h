@@ -59,6 +59,7 @@ private:
 	void DrawCenteredText(const FString& Text, float CenterY, const FLinearColor& Color, float Scale);
 	void DrawScore(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawEnemyHealthBars();
+	void DrawCollectibles(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawAmmo(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bAlignRight);
 };

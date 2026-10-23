@@ -4,6 +4,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "Engine/Texture.h"
 #include "PrototipoShooterCharacter.h"
 #include "ShooterInteractable.h"
 #include "ShooterEnemy.h"
@@ -29,6 +30,43 @@ void AShooterHUD::DrawHUD()
 	DrawCrosshair(ShooterCharacter);
 	DrawScore(ShooterCharacter);
 	DrawAmmo(ShooterCharacter);
+	DrawCollectibles(ShooterCharacter);
+}
+
+void AShooterHUD::DrawCollectibles(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	const int32 Count = ShooterCharacter->GetCollectedCount();
+	if (Count <= 0)
+	{
+		return;
+	}
+
+	// PROVISORIO: Colecionavel, icone desenhado como hexagono dourado. Trocar por icone com arte propria.
+	const float SinceCollect = GetWorld()->GetTimeSeconds() - ShooterCharacter->GetLastCollectTime();
+
+	// canto superior direito
+	const float CenterX = Canvas->ClipX - HudMargin - 18.f;
+	const float CenterY = HudMargin + 22.f;
+
+	// "pulo" do icone logo apos coletar
+	const float Pop = SinceCollect < 0.4f ? 1.f + 0.6f * FMath::Sin((SinceCollect / 0.4f) * PI) : 1.f;
+	const float Radius = 16.f * Pop;
+
+	// fundo + medalha (hexagono dourado com miolo mais claro)
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), CenterX - 30.f - 60.f, CenterY - 26.f, 120.f, 52.f);
+	Canvas->K2_DrawPolygon(nullptr, FVector2D(CenterX, CenterY), FVector2D(Radius, Radius), 6, FLinearColor(0.85f, 0.6f, 0.08f, 1.f));
+	Canvas->K2_DrawPolygon(nullptr, FVector2D(CenterX, CenterY), FVector2D(Radius * 0.55f, Radius * 0.55f), 6, FLinearColor(1.f, 0.85f, 0.35f, 1.f));
+
+	// quantidade
+	DrawTextAt(FString::Printf(TEXT("x%d"), Count), CenterX - Radius - 8.f, CenterY - 12.f, FLinearColor::White, 1.2f, true);
+
+	// aviso rapido logo apos coletar
+	if (SinceCollect < 2.5f)
+	{
+		const float Alpha = SinceCollect < 2.f ? 1.f : 1.f - (SinceCollect - 2.f) / 0.5f;
+		const FString Text = FString::Printf(TEXT("%s coletada!"), *ShooterCharacter->GetLastCollectedName());
+		DrawTextAt(Text, Canvas->ClipX - HudMargin, CenterY + 32.f, FLinearColor(1.f, 0.85f, 0.35f, Alpha), 1.f, true);
+	}
 }
 
 void AShooterHUD::DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bAlignRight)
@@ -137,7 +175,20 @@ void AShooterHUD::DrawInteraction(const APrototipoShooterCharacter* ShooterChara
 	// aviso de interacao quando ha um objeto ao alcance
 	if (const AShooterInteractable* Interactable = ShooterCharacter->GetFocusedInteractable())
 	{
-		DrawCenteredText(Interactable->Prompt, Canvas->ClipY * 0.68f, FLinearColor(0.6f, 0.9f, 1.f, 1.f), 1.f);
+		const float PromptY = Canvas->ClipY * 0.68f;
+		DrawCenteredText(Interactable->Prompt, PromptY, FLinearColor(0.6f, 0.9f, 1.f, 1.f), 1.f);
+
+		// barra de progresso para objetos que exigem segurar o botao
+		if (Interactable->HoldDuration > 0.f)
+		{
+			const float BarWidth = 160.f;
+			const float BarHeight = 6.f;
+			const float BarX = (Canvas->ClipX - BarWidth) * 0.5f;
+			const float BarY = PromptY + 18.f;
+
+			DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.2f), BarX, BarY, BarWidth, BarHeight);
+			DrawRect(FLinearColor(1.f, 0.8f, 0.2f, 1.f), BarX, BarY, BarWidth * ShooterCharacter->GetInteractHoldProgress(), BarHeight);
+		}
 	}
 }
 

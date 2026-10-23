@@ -119,6 +119,8 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoFireEnd);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoInteract);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoInteractRelease);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoInteractRelease);
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoReload);
 		EnhancedInputComponent->BindAction(MeleeAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoMelee);
 	}
@@ -316,6 +318,9 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 
 	// aproxima/afasta a camera ao entrar/sair da mira
 	AimAlpha = FMath::FInterpTo(AimAlpha, bIsAiming ? 1.f : 0.f, DeltaSeconds, AimInterpSpeed);
+
+	// interacao de segurar (colecionaveis)
+	UpdateInteractHold();
 
 	// agacha atras da cobertura / levanta para mirar
 	UpdateCover();
@@ -768,10 +773,66 @@ void APrototipoShooterCharacter::DoSwapShoulder()
 
 void APrototipoShooterCharacter::DoInteract()
 {
-	if (AShooterInteractable* Interactable = FocusedInteractable.Get())
+	AShooterInteractable* Interactable = FocusedInteractable.Get();
+	if (!Interactable)
+	{
+		return;
+	}
+
+	// objetos que exigem segurar: comeca a contar; os outros interagem na hora
+	if (Interactable->HoldDuration > 0.f)
+	{
+		bHoldingInteract = true;
+		InteractHoldStart = GetWorld()->GetTimeSeconds();
+	}
+	else
 	{
 		Interactable->Interact(this);
 	}
+}
+
+void APrototipoShooterCharacter::DoInteractRelease()
+{
+	bHoldingInteract = false;
+}
+
+void APrototipoShooterCharacter::UpdateInteractHold()
+{
+	if (!bHoldingInteract)
+	{
+		return;
+	}
+
+	// saiu do alcance: cancela
+	AShooterInteractable* Interactable = FocusedInteractable.Get();
+	if (!Interactable)
+	{
+		bHoldingInteract = false;
+		return;
+	}
+
+	if (GetInteractHoldProgress() >= 1.f)
+	{
+		bHoldingInteract = false;
+		Interactable->Interact(this);
+	}
+}
+
+float APrototipoShooterCharacter::GetInteractHoldProgress() const
+{
+	const AShooterInteractable* Interactable = FocusedInteractable.Get();
+	if (!bHoldingInteract || !Interactable || Interactable->HoldDuration <= 0.f)
+	{
+		return 0.f;
+	}
+
+	return FMath::Clamp((GetWorld()->GetTimeSeconds() - InteractHoldStart) / Interactable->HoldDuration, 0.f, 1.f);
+}
+
+void APrototipoShooterCharacter::AddCollectible(const FString& ItemName)
+{
+	CollectedItems.Add(ItemName);
+	LastCollectTime = GetWorld()->GetTimeSeconds();
 }
 
 void APrototipoShooterCharacter::SetFocusedInteractable(AShooterInteractable* Interactable)
@@ -785,6 +846,7 @@ void APrototipoShooterCharacter::ClearFocusedInteractable(AShooterInteractable* 
 	if (FocusedInteractable.Get() == Interactable)
 	{
 		FocusedInteractable = nullptr;
+		bHoldingInteract = false;
 	}
 }
 
