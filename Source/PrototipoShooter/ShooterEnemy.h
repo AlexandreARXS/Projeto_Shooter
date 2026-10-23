@@ -1,4 +1,4 @@
-// Primeiro inimigo: patrulha, leva dano no corpo e na cabeca, morre e reaparece
+// Primeiro inimigo: patrulha, ve o jogador e atira em rajadas; leva dano no corpo e na cabeca, morre e reaparece
 
 #pragma once
 
@@ -9,8 +9,10 @@
 class UCapsuleComponent;
 class USphereComponent;
 class UAnimSequence;
+class AShooterWeapon;
+class APrototipoShooterCharacter;
 
-// PROVISORIO: Inimigo, IA simples (patrulha em linha reta, sem NavMesh). Trocar por StateTree/Behavior Tree + NavMesh (perseguir, cobertura, atirar).
+// PROVISORIO: Inimigo, IA simples (patrulha em linha reta sem NavMesh, da meia-volta em obstaculos; ao ver o jogador para e atira parado, sem buscar cobertura nem perseguir). Trocar por StateTree/Behavior Tree + NavMesh.
 UCLASS()
 class AShooterEnemy : public ACharacter
 {
@@ -44,6 +46,10 @@ public:
 
 	/** Ponto acima da cabeca, onde a HUD desenha a barra de vida */
 	FVector GetHealthBarLocation() const;
+
+	/** Viu o jogador e esta em combate? usado pela HUD ("!") */
+	UFUNCTION(BlueprintPure, Category="Inimigo")
+	bool IsEngaged() const { return bEngaged; }
 
 protected:
 
@@ -118,6 +124,100 @@ protected:
 	FRotator SpawnRotation = FRotator::ZeroRotator;
 	bool bMovingToEnd = true;
 	float WaitUntil = 0.f;
+
+	// ---------- Visao ----------
+
+	/** Distancia maxima em que o inimigo enxerga o jogador */
+	UPROPERTY(EditAnywhere, Category="Visao")
+	float SightRange = 2500.f;
+
+	/** Metade do campo de visao, em graus (60 = cone de 120 graus a frente) */
+	UPROPERTY(EditAnywhere, Category="Visao")
+	float SightHalfAngle = 60.f;
+
+	/** Tempo entre ver o jogador e o primeiro tiro */
+	UPROPERTY(EditAnywhere, Category="Visao")
+	float ReactionTime = 0.6f;
+
+	/** Segundos sem ver o jogador ate desistir e voltar a patrulha */
+	UPROPERTY(EditAnywhere, Category="Visao")
+	float LoseSightTime = 2.f;
+
+	// ---------- Tiro (rajadas) ----------
+
+	/** Tiros por rajada */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	int32 BurstSize = 3;
+
+	/** Tempo entre os tiros de uma mesma rajada */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float BurstShotInterval = 0.1f;
+
+	/** Pausa entre uma rajada e a proxima */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float BurstPause = 1.5f;
+
+	/** Dano por tiro (mesma arma do jogador: 5 no corpo / 2 na cabeca) */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float ShotDamage = 20.f;
+
+	/** Imprecisao do inimigo, em graus */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float AimSpreadDegrees = 2.5f;
+
+	/** Alcance do tiro */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float FireRange = 5000.f;
+
+	/** So atira quando estiver virado para o jogador (graus) */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	float FireFacingTolerance = 20.f;
+
+	/** Posicoes da arma: descanso (patrulha) e tiro (combate), relativas ao inimigo */
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	FVector WeaponRestOffset = FVector(28.f, 24.f, -8.f);
+
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	FRotator WeaponRestRotation = FRotator(-40.f, -10.f, 0.f);
+
+	UPROPERTY(EditAnywhere, Category="Tiro")
+	FVector WeaponAimOffset = FVector(38.f, 20.f, 48.f);
+
+	/** Arma do inimigo (mesmo modelo provisorio do jogador) */
+	UPROPERTY()
+	TObjectPtr<AShooterWeapon> Weapon;
+
+	TWeakObjectPtr<APrototipoShooterCharacter> TargetPlayer;
+	bool bEngaged = false;
+	bool bCanSeeTarget = false;
+	float LastSeenTime = -100.f;
+	float NextShotTime = 0.f;
+	int32 ShotsLeftInBurst = 3;
+	float CombatAlpha = 0.f;
+
+	/** Procura o jogador no campo de visao */
+	void UpdatePerception(float Now);
+
+	/** Linha de visao livre ate a cabeca ou o peito do jogador? */
+	bool CanSeePlayer(const APrototipoShooterCharacter* Player, bool bIgnoreAngle) const;
+
+	/** Em combate: vira para o jogador e atira em rajadas */
+	void UpdateCombat(float Now, float DeltaSeconds);
+
+	/** Entra em combate com o jogador */
+	void Engage(APrototipoShooterCharacter* Player, float Now);
+
+	/** Sai do combate e volta a patrulhar */
+	void Disengage(float Now);
+
+	/** Um tiro da rajada */
+	void FireAtTarget();
+
+	/** Posiciona a arma entre descanso e tiro */
+	void UpdateWeaponTransform();
+
+	/** Ponto de onde o inimigo "olha" (cabeca) */
+	FVector GetEyeLocation() const;
 
 	/** Anda em direcao ao ponto atual da patrulha */
 	void UpdatePatrol();

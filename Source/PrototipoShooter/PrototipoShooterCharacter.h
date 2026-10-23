@@ -16,6 +16,9 @@ class AShooterInteractable;
 class AShooterCover;
 class UAnimSequence;
 class UAnimInstance;
+class UCapsuleComponent;
+class USphereComponent;
+class SPauseMenuWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -36,6 +39,14 @@ class APrototipoShooterCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
+
+	/** Area de acerto do corpo do jogador (tiros inimigos) */
+	UPROPERTY(VisibleAnywhere, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCapsuleComponent> PlayerBodyHitbox;
+
+	/** Area de acerto da cabeca do jogador (presa ao osso "head") */
+	UPROPERTY(VisibleAnywhere, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USphereComponent> PlayerHeadHitbox;
 	
 protected:
 
@@ -70,6 +81,10 @@ protected:
 	/** Golpe corpo-a-corpo. Se ficar vazio, e criado em codigo (tecla V / botao B do controle) */
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> MeleeAction;
+
+	/** Pausar. Se ficar vazio, e criado em codigo (Esc, P / Start no controle) */
+	UPROPERTY(EditAnywhere, Category="Input")
+	TObjectPtr<UInputAction> PauseAction;
 
 	/** Recarregar. Se ficar vazio, e criado em codigo (tecla R / botao RB do controle) */
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -295,6 +310,59 @@ protected:
 	/** Volta para a animacao normal (Animation Blueprint) */
 	void RestoreDefaultAnimation();
 
+	// ---------- Vida ----------
+
+	/**
+	 * Vida maxima. Mesma regra do inimigo, com a arma inimiga (20 de dano):
+	 * corpo = 20 -> 5 tiros; cabeca = 20 x 2.5 = 50 -> 2 tiros
+	 */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	float MaxHealth = 100.f;
+
+	/** Multiplicador de dano na cabeca */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	float HeadshotMultiplier = 2.5f;
+
+	/** Segundos entre a morte e o reinicio do mapa */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	float RestartDelay = 4.f;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Vida")
+	float Health = 100.f;
+
+	bool bIsDead = false;
+	float LastDamageTime = -100.f;
+	bool bLastDamageWasHeadshot = false;
+	FTimerHandle RestartTimer;
+
+	/** Animacao de morte do jogador */
+	UPROPERTY(EditAnywhere, Category="Vida")
+	TObjectPtr<UAnimSequence> DeathAnimation;
+
+	/** Morre: para tudo, toca a animacao e agenda o reinicio */
+	void Die();
+
+	/** Recarrega o mapa atual (recomeca a fase) */
+	void RestartLevel();
+
+	/** Liga/desliga as areas de acerto do jogador */
+	void SetHitboxesEnabled(bool bEnabled);
+
+	// ---------- Pausa ----------
+
+	/** Mapa do menu principal (botao MENU PRINCIPAL da pausa) */
+	UPROPERTY(EditAnywhere, Category="Pausa")
+	FName MainMenuLevel = TEXT("/Game/Maps/MainMenu_Principal");
+
+	TSharedPtr<SPauseMenuWidget> PauseWidget;
+
+	void ResumeGame();
+	void GoToMainMenu();
+	void QuitFromPause();
+
+	/** Tira o menu de pausa da tela */
+	void ClosePauseMenu();
+
 	/** Pontuacao total do jogador */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Pontos")
 	int32 Score = 0;
@@ -362,6 +430,10 @@ protected:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/** Agachar/levantar: ajusta as areas de acerto (agachado na cobertura, so a parte de cima fica exposta) */
+	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+
 	/** Liga/desliga a postura de combate (personagem encara a camera) */
 	void UpdateCombatStance();
 
@@ -428,6 +500,31 @@ public:
 	/** Quanto a arma esta levantada (0 a 1), usado pela HUD */
 	UFUNCTION(BlueprintPure, Category="Tiro")
 	float GetCombatAlpha() const { return CombatAlpha; }
+
+	/** Leva dano (tiros inimigos): corpo ou cabeca */
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+	/** Abre o menu de pausa */
+	UFUNCTION(BlueprintCallable, Category="Pausa")
+	virtual void DoPause();
+
+	UFUNCTION(BlueprintPure, Category="Vida")
+	float GetHealth() const { return Health; }
+
+	UFUNCTION(BlueprintPure, Category="Vida")
+	float GetMaxHealth() const { return MaxHealth; }
+
+	UFUNCTION(BlueprintPure, Category="Vida")
+	bool IsDead() const { return bIsDead; }
+
+	/** Momento do ultimo dano, usado pela HUD (tela vermelha) */
+	float GetLastDamageTime() const { return LastDamageTime; }
+
+	/** Ponto do peito, onde os inimigos miram */
+	FVector GetAimTargetLocation() const;
+
+	/** Posicao da cabeca (osso "head") */
+	FVector GetHeadLocation() const;
 
 	/** Chamado pela cobertura quando o jogador entra/sai da area dela */
 	void EnterCover(AShooterCover* Cover);

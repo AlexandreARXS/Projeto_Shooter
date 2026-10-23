@@ -31,6 +31,44 @@ void AShooterHUD::DrawHUD()
 	DrawScore(ShooterCharacter);
 	DrawAmmo(ShooterCharacter);
 	DrawCollectibles(ShooterCharacter);
+	DrawPlayerHealth(ShooterCharacter);
+	DrawDamageFeedback(ShooterCharacter);
+}
+
+void AShooterHUD::DrawPlayerHealth(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	// canto inferior esquerdo: barra verde de vida
+	const float Percent = FMath::Clamp(ShooterCharacter->GetHealth() / ShooterCharacter->GetMaxHealth(), 0.f, 1.f);
+
+	const float BarWidth = 220.f;
+	const float BarHeight = 12.f;
+	const float X = HudMargin;
+	const float BarY = Canvas->ClipY - HudMargin - BarHeight;
+
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), X - 12.f, BarY - 34.f, BarWidth + 24.f, BarHeight + 46.f);
+	DrawTextAt(TEXT("VIDA"), X, BarY - 26.f, FLinearColor(0.75f, 0.75f, 0.75f, 1.f), 0.9f, false);
+
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.15f), X, BarY, BarWidth, BarHeight);
+	DrawRect(FLinearColor(0.2f, 0.85f, 0.25f, 1.f), X, BarY, BarWidth * Percent, BarHeight);
+}
+
+void AShooterHUD::DrawDamageFeedback(const APrototipoShooterCharacter* ShooterCharacter)
+{
+	// PROVISORIO: Vida, feedback de dano com a tela inteira avermelhada. Trocar por vinheta/sangue nas bordas + som.
+	const float SinceDamage = GetWorld()->GetTimeSeconds() - ShooterCharacter->GetLastDamageTime();
+	if (SinceDamage >= 0.f && SinceDamage < DamageFlashDuration)
+	{
+		const float Alpha = 0.3f * (1.f - SinceDamage / DamageFlashDuration);
+		DrawRect(FLinearColor(0.8f, 0.f, 0.f, Alpha), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	}
+
+	// tela de morte
+	if (ShooterCharacter->IsDead())
+	{
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		DrawCenteredText(FString(TEXT("VOC\u00CA MORREU")), Canvas->ClipY * 0.42f, FLinearColor(0.9f, 0.1f, 0.1f, 1.f), 2.5f);
+		DrawCenteredText(TEXT("Reiniciando..."), Canvas->ClipY * 0.52f, FLinearColor(0.8f, 0.8f, 0.8f, 1.f), 1.f);
+	}
 }
 
 void AShooterHUD::DrawCollectibles(const APrototipoShooterCharacter* ShooterCharacter)
@@ -275,5 +313,11 @@ void AShooterHUD::DrawEnemyHealthBars()
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), X - 1.f, Y - 1.f, Width + 2.f, Height + 2.f);
 		const FLinearColor BarColor = FLinearColor::LerpUsingHSV(FLinearColor(1.f, 0.1f, 0.1f), FLinearColor(0.2f, 1.f, 0.2f), Percent);
 		DrawRect(BarColor, X, Y, Width * Percent, Height);
+
+		// inimigo em combate (viu o jogador): "!" vermelho acima da barra
+		if (Enemy->IsEngaged())
+		{
+			DrawTextAt(TEXT("!"), Screen.X - 5.f, Y - 30.f, FLinearColor(1.f, 0.15f, 0.1f, 1.f), 1.8f, false);
+		}
 	}
 }

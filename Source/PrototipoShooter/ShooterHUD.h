@@ -44,6 +44,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Painel")
 	float HudMargin = 40.f;
 
+	/** Duracao do clarao vermelho ao levar dano */
+	UPROPERTY(EditAnywhere, Category="Painel")
+	float DamageFlashDuration = 0.35f;
+
 	/** Abaixo deste numero de balas, o contador fica laranja */
 	UPROPERTY(EditAnywhere, Category="Painel")
 	int32 LowAmmoThreshold = 10;
@@ -60,6 +64,8 @@ private:
 	void DrawScore(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawEnemyHealthBars();
 	void DrawCollectibles(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawPlayerHealth(const APrototipoShooterCharacter* ShooterCharacter);
+	void DrawDamageFeedback(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawAmmo(const APrototipoShooterCharacter* ShooterCharacter);
 	void DrawTextAt(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bAlignRight);
 };

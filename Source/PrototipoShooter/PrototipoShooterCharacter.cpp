@@ -16,6 +16,12 @@
 #include "ShooterWeapon.h"
 #include "ShooterInteractable.h"
 #include "ShooterCover.h"
+#include "PauseMenuWidget.h"
+#include "Components/SphereComponent.h"
+#include "Engine/DamageEvents.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "ShooterDamageTypes.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimInstance.h"
@@ -27,6 +33,25 @@
 #include "Engine/World.h"
 #include "PrototipoShooter.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+	/** Hitbox do jogador: invisivel, so bloqueia tiros (canal Visibility) */
+	void SetupPlayerHitbox(UShapeComponent* Hitbox)
+	{
+		Hitbox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Hitbox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Hitbox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		Hitbox->SetGenerateOverlapEvents(false);
+		Hitbox->SetCanEverAffectNavigation(false);
+	}
+
+	// corpo em pe: do chao (Z -96) ate o pescoco; agachado: do chao ate a altura da cobertura (~88 cm)
+	constexpr float BodyHalfHeightStanding = 72.f;
+	constexpr float BodyOffsetStanding = -24.f;
+	constexpr float BodyHalfHeightCrouched = 44.f;
+	constexpr float BodyOffsetCrouched = -16.f;
+}
 
 APrototipoShooterCharacter::APrototipoShooterCharacter()
 {
@@ -69,6 +94,27 @@ APrototipoShooterCharacter::APrototipoShooterCharacter()
 
 	// arma padrao
 	WeaponClass = AShooterWeapon::StaticClass();
+
+	// a capsula deixa os tiros passarem para as hitboxes (mesma regra do inimigo)
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+
+	PlayerBodyHitbox = CreateDefaultSubobject<UCapsuleComponent>(TEXT("PlayerBodyHitbox"));
+	PlayerBodyHitbox->SetupAttachment(GetCapsuleComponent());
+	PlayerBodyHitbox->InitCapsuleSize(28.f, BodyHalfHeightStanding);
+	PlayerBodyHitbox->SetRelativeLocation(FVector(0.f, 0.f, BodyOffsetStanding));
+	SetupPlayerHitbox(PlayerBodyHitbox);
+
+	PlayerHeadHitbox = CreateDefaultSubobject<USphereComponent>(TEXT("PlayerHeadHitbox"));
+	PlayerHeadHitbox->SetupAttachment(GetMesh(), TEXT("head"));
+	PlayerHeadHitbox->InitSphereRadius(16.f);
+	SetupPlayerHitbox(PlayerHeadHitbox);
+
+	// animacao de morte
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> DeathAnim(TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Front_01.MM_Death_Front_01"));
+	if (DeathAnim.Succeeded())
+	{
+		DeathAnimation = DeathAnim.Object;
+	}
 
 	// animacao do golpe corpo-a-corpo (soco do template)
 	static ConstructorHelpers::FObjectFinder<UAnimSequence> MeleeAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Attack/MM_Attack_01.MM_Attack_01"));
@@ -122,6 +168,7 @@ void APrototipoShooterCharacter::SetupPlayerInputComponent(UInputComponent* Play
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &APrototipoShooterCharacter::DoInteractRelease);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Canceled, this, &APrototipoShooterCharacter::DoInteractRelease);
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoReload);
+		EnhancedInputComponent->BindAction(PauseAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoPause);
 		EnhancedInputComponent->BindAction(MeleeAction, ETriggerEvent::Started, this, &APrototipoShooterCharacter::DoMelee);
 	}
 	else
@@ -222,6 +269,12 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		MeleeAction = NewObject<UInputAction>(this, TEXT("IA_CorpoACorpo"));
 	}
 
+	// cria a acao de pausa se ela nao foi definida no Blueprint
+	if (!PauseAction)
+	{
+		PauseAction = NewObject<UInputAction>(this, TEXT("IA_Pausar"));
+	}
+
 	// cria a acao de recarga se ela nao foi definida no Blueprint
 	if (!ReloadAction)
 	{
@@ -246,6 +299,10 @@ void APrototipoShooterCharacter::SetupShooterInput()
 		ShooterMappingContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
 		ShooterMappingContext->MapKey(InteractAction, EKeys::E);
 		ShooterMappingContext->MapKey(ReloadAction, EKeys::R);
+		ShooterMappingContext->MapKey(PauseAction, EKeys::Escape);
+		// P tambem pausa: no editor, o Esc encerra o Play por padrao
+		ShooterMappingContext->MapKey(PauseAction, EKeys::P);
+		ShooterMappingContext->MapKey(PauseAction, EKeys::Gamepad_Special_Right);
 		ShooterMappingContext->MapKey(MeleeAction, EKeys::V);
 		ShooterMappingContext->MapKey(MeleeAction, EKeys::Gamepad_FaceButton_Right);
 		ShooterMappingContext->MapKey(ReloadAction, EKeys::Gamepad_RightShoulder);
@@ -276,8 +333,9 @@ void APrototipoShooterCharacter::BeginPlay()
 	DefaultWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
 	DefaultRotationRate = GetCharacterMovement()->RotationRate;
 
-	// comeca com o pente cheio
+	// comeca com o pente cheio e a vida cheia
 	CurrentAmmo = MagazineSize;
+	Health = MaxHealth;
 
 	// guarda a animacao normal para restaurar depois do golpe
 	DefaultAnimClass = GetMesh()->GetAnimClass();
@@ -309,6 +367,12 @@ void APrototipoShooterCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// morto: nada de camera de mira, arma ou cobertura
+	if (bIsDead)
+	{
+		return;
+	}
+
 	// desliza a camera suavemente para o ombro escolhido
 	const float TargetSide = bRightShoulder ? 1.f : -1.f;
 	if (!FMath::IsNearlyEqual(CurrentShoulderSide, TargetSide, 0.001f))
@@ -339,6 +403,9 @@ void APrototipoShooterCharacter::EndPlay(const EEndPlayReason::Type EndPlayReaso
 	GetWorldTimerManager().ClearTimer(ReloadTimer);
 	GetWorldTimerManager().ClearTimer(MeleeHitTimer);
 	GetWorldTimerManager().ClearTimer(MeleeEndTimer);
+	GetWorldTimerManager().ClearTimer(RestartTimer);
+
+	ClosePauseMenu();
 
 	if (Weapon)
 	{
@@ -870,4 +937,198 @@ bool APrototipoShooterCharacter::GetActiveScreenMessage(FString& OutMessage) con
 
 	OutMessage = ScreenMessage;
 	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Vida
+// ---------------------------------------------------------------------------
+
+float APrototipoShooterCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	// morto ou dano proprio: ignora
+	if (bIsDead || DamageCauser == this)
+	{
+		return 0.f;
+	}
+
+	Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+	// acertou a cabeca?
+	bool bHeadshot = false;
+	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	{
+		const FPointDamageEvent& PointEvent = static_cast<const FPointDamageEvent&>(DamageEvent);
+		bHeadshot = PointEvent.HitInfo.GetComponent() == PlayerHeadHitbox.Get();
+	}
+
+	const float Damage = DamageAmount * (bHeadshot ? HeadshotMultiplier : 1.f);
+	Health = FMath::Max(0.f, Health - Damage);
+	LastDamageTime = GetWorld()->GetTimeSeconds();
+	bLastDamageWasHeadshot = bHeadshot;
+
+	if (Health <= KINDA_SMALL_NUMBER)
+	{
+		Die();
+	}
+
+	return Damage;
+}
+
+void APrototipoShooterCharacter::Die()
+{
+	bIsDead = true;
+
+	// para tudo o que estava acontecendo
+	DoFireEnd();
+	GetWorldTimerManager().ClearTimer(ReloadTimer);
+	GetWorldTimerManager().ClearTimer(MeleeHitTimer);
+	GetWorldTimerManager().ClearTimer(MeleeEndTimer);
+	bIsAiming = false;
+	bIsReloading = false;
+	bIsMeleeing = false;
+	bHoldingInteract = false;
+	bCoverPoseActive = false;
+
+	SetHitboxesEnabled(false);
+	GetCharacterMovement()->DisableMovement();
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+	}
+
+	if (Weapon)
+	{
+		Weapon->SetActorHiddenInGame(true);
+	}
+
+	// animacao de morte (fica parada no ultimo quadro)
+	if (DeathAnimation)
+	{
+		GetMesh()->PlayAnimation(DeathAnimation, false);
+	}
+
+	// PROVISORIO: Vida, ao morrer o mapa inteiro e recarregado. Trocar por checkpoints/tela de derrota.
+	GetWorldTimerManager().SetTimer(RestartTimer, this, &APrototipoShooterCharacter::RestartLevel, RestartDelay, false);
+}
+
+void APrototipoShooterCharacter::RestartLevel()
+{
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
+}
+
+void APrototipoShooterCharacter::SetHitboxesEnabled(bool bEnabled)
+{
+	const ECollisionEnabled::Type Mode = bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision;
+	PlayerBodyHitbox->SetCollisionEnabled(Mode);
+	PlayerHeadHitbox->SetCollisionEnabled(Mode);
+}
+
+void APrototipoShooterCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+
+	// agachado atras da cobertura: o corpo fica todo abaixo da borda do bloco
+	PlayerBodyHitbox->SetCapsuleHalfHeight(BodyHalfHeightCrouched);
+	PlayerBodyHitbox->SetRelativeLocation(FVector(0.f, 0.f, BodyOffsetCrouched));
+
+	// PROVISORIO: Cobertura, a cabeca fica protegida enquanto agachado (a pose provisoria nao abaixa a cabeca o suficiente). Rever com a animacao de agachar real.
+	PlayerHeadHitbox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void APrototipoShooterCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+
+	PlayerBodyHitbox->SetCapsuleHalfHeight(BodyHalfHeightStanding);
+	PlayerBodyHitbox->SetRelativeLocation(FVector(0.f, 0.f, BodyOffsetStanding));
+
+	if (!bIsDead)
+	{
+		PlayerHeadHitbox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+}
+
+FVector APrototipoShooterCharacter::GetAimTargetLocation() const
+{
+	// peito: parte de cima da area do corpo
+	return PlayerBodyHitbox->GetComponentLocation() + FVector(0.f, 0.f, PlayerBodyHitbox->GetScaledCapsuleHalfHeight() * 0.4f);
+}
+
+FVector APrototipoShooterCharacter::GetHeadLocation() const
+{
+	return GetMesh()->GetSocketLocation(TEXT("head"));
+}
+
+// ---------------------------------------------------------------------------
+// Pausa
+// ---------------------------------------------------------------------------
+
+void APrototipoShooterCharacter::DoPause()
+{
+	if (bIsDead || PauseWidget.IsValid())
+	{
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !GEngine || !GEngine->GameViewport)
+	{
+		return;
+	}
+
+	// solta tudo o que estava apertado (evita voltar mirando/atirando)
+	DoFireEnd();
+	DoAimEnd();
+	bHoldingInteract = false;
+
+	SAssignNew(PauseWidget, SPauseMenuWidget)
+		.OnResume(FSimpleDelegate::CreateUObject(this, &APrototipoShooterCharacter::ResumeGame))
+		.OnMainMenu(FSimpleDelegate::CreateUObject(this, &APrototipoShooterCharacter::GoToMainMenu))
+		.OnQuit(FSimpleDelegate::CreateUObject(this, &APrototipoShooterCharacter::QuitFromPause));
+
+	GEngine->GameViewport->AddViewportWidgetContent(PauseWidget.ToSharedRef(), 100);
+
+	UGameplayStatics::SetGamePaused(this, true);
+
+	// so interface: mouse visivel, foco em CONTINUAR
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(PauseWidget->GetResumeButton());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+	PC->bShowMouseCursor = true;
+}
+
+void APrototipoShooterCharacter::ClosePauseMenu()
+{
+	if (PauseWidget.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(PauseWidget.ToSharedRef());
+	}
+	PauseWidget.Reset();
+}
+
+void APrototipoShooterCharacter::ResumeGame()
+{
+	ClosePauseMenu();
+	UGameplayStatics::SetGamePaused(this, false);
+
+	// volta o controle para o jogo, de onde parou
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+		PC->bShowMouseCursor = false;
+	}
+}
+
+void APrototipoShooterCharacter::GoToMainMenu()
+{
+	ClosePauseMenu();
+	UGameplayStatics::SetGamePaused(this, false);
+	UGameplayStatics::OpenLevel(this, MainMenuLevel);
+}
+
+void APrototipoShooterCharacter::QuitFromPause()
+{
+	UKismetSystemLibrary::QuitGame(this, Cast<APlayerController>(GetController()), EQuitPreference::Quit, false);
 }
